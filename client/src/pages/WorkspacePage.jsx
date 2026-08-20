@@ -660,10 +660,27 @@ const WorkspacePage = () => {
     }
   };
 
-  // Copy Room Link
+  // Copy Room Link with fallback support
   const copyRoomLink = () => {
-    const link = `${window.location.origin}/workspace/${roomId}`;
-    navigator.clipboard.writeText(link);
+    const basePath = window.location.pathname.startsWith('/pro-collab') ? '/pro-collab' : '';
+    const link = `${window.location.origin}${basePath}/workspace/${roomId}`;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(link);
+      } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = link;
+        textArea.style.position = 'fixed';
+        textArea.style.opacity = '0';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
+    } catch (err) {
+      console.warn('Clipboard write failed, fallback used');
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
