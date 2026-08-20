@@ -1,11 +1,13 @@
 const http = require('http');
+const { spawn } = require('child_process');
+const path = require('path');
 
-function request(method, path, data = null, token = null) {
+function request(method, reqPath, data = null, token = null) {
   return new Promise((resolve, reject) => {
     const options = {
-      hostname: 'localhost',
+      hostname: '127.0.0.1',
       port: 5000,
-      path: path,
+      path: reqPath,
       method: method,
       headers: {
         'Content-Type': 'application/json',
@@ -34,8 +36,61 @@ function request(method, path, data = null, token = null) {
   });
 }
 
+function waitForServer(retries = 20, delay = 300) {
+  return new Promise((resolve, reject) => {
+    let count = 0;
+    const check = () => {
+      const req = http.get('http://127.0.0.1:5000/api/health', (res) => {
+        if (res.statusCode === 200) {
+          return resolve();
+        }
+        retry();
+      });
+      req.on('error', () => {
+        retry();
+      });
+    };
+
+    const retry = () => {
+      count++;
+      if (count >= retries) {
+        reject(new Error('Server did not start in time.'));
+      } else {
+        setTimeout(check, delay);
+      }
+    };
+
+    check();
+  });
+}
+
 async function runTests() {
   console.log('=== STARTING AUTOMATED BACKEND TESTS ===\n');
+
+  let serverProcess = null;
+  let selfStarted = false;
+
+  // Check if server is already running
+  try {
+    await waitForServer(2, 200);
+    console.log('⚡ Connected to existing server on port 5000');
+  } catch (e) {
+    console.log('🚀 Spawning local server process for test suite...');
+    serverProcess = spawn(process.execPath, [path.join(__dirname, 'server.js')], {
+      env: { ...process.env, PORT: '5000', NODE_ENV: 'test' },
+      stdio: 'pipe'
+    });
+    selfStarted = true;
+    try {
+      await waitForServer(25, 300);
+      console.log('✅ Server started successfully for testing.\n');
+    } catch (err) {
+      console.error('❌ Could not start test server:', err.message);
+      if (serverProcess) serverProcess.kill();
+      process.exit(1);
+    }
+  }
+
   let passed = 0;
   let failed = 0;
 
@@ -161,6 +216,12 @@ async function runTests() {
   console.log('\n========================================');
   console.log(`TOTAL PASSED: ${passed} | TOTAL FAILED: ${failed}`);
   console.log('========================================');
+
+  if (selfStarted && serverProcess) {
+    serverProcess.kill();
+  }
+
+  process.exit(failed > 0 ? 1 : 0);
 }
 
 runTests();
