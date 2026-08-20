@@ -1,0 +1,25 @@
+{
+  "name": "pro-collab",
+  "version": "1.0.0",
+  "description": "Pro-Collab - Real-Time Collaborative Workspace & Code Platform",
+  "private": true,
+  "scripts": {
+    "install:all": "npm install --prefix client && npm install --prefix server",
+    "build": "npm run build --prefix client",
+    "start": "node server/server.js",
+    "client": "npm run dev --prefix client",
+    "server": "node server/server.js",
+    "dev:server": "npm run dev --prefix server",
+    "test:server": "node server/test_suite.js"
+  },
+  "keywords": [
+    "collaboration",
+    "code-editor",
+    "monaco",
+    "socket-io",
+    "real-time",
+    "webrtc"
+  ],
+  "author": "Vaibhav Sarnobat",
+  "license": "MIT"
+}
