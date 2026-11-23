@@ -1,0 +1,254 @@
+/* Shared styles for the split-panel auth screens (login + signup). */
+
+.au-screen {
+  min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 84px 20px 40px; position: relative; background: var(--bg); color: var(--ink);
+}
+.au-grid {
+  position: absolute; inset: 0; pointer-events: none;
+  background-image: linear-gradient(to right, var(--line) 1px, transparent 1px), linear-gradient(to bottom, var(--line) 1px, transparent 1px);
+  background-size: 60px 60px;
+  mask-image: radial-gradient(ellipse 75% 65% at 50% 45%, #000 20%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse 75% 65% at 50% 45%, #000 20%, transparent 80%);
+}
+
+.au-topbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 20; display: flex; justify-content: space-between;
+  align-items: center; padding: 16px 24px;
+}
+.au-pill {
+  display: inline-flex; align-items: center; gap: 7px; text-decoration: none;
+  background: var(--surface); border: 1px solid var(--line-strong); color: var(--ink-soft);
+  font-size: 12.5px; font-weight: 700; padding: 8px 14px; border-radius: 999px; cursor: pointer; transition: all 0.2s;
+}
+.au-pill:hover { color: var(--ink); border-color: var(--brand-line); background: var(--brand-soft); }
+
+.au-shell {
+  position: relative; z-index: 1; width: 100%; max-width: 1020px; display: grid;
+  grid-template-columns: 1fr 0.92fr; background: var(--surface-solid); border: 1px solid var(--line-strong);
+  border-radius: 22px; overflow: hidden; box-shadow: var(--shadow);
+}
+
+.au-left { padding: 38px 34px; background: var(--surface-3); border-right: 1px solid var(--line); display: flex; flex-direction: column; }
+.au-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 30px; }
+.au-logo {
+  width: 32px; height: 32px; border-radius: 9px; background: linear-gradient(135deg, var(--brand), var(--violet) 60%, var(--cyan));
+  display: flex; align-items: center; justify-content: center; color: #fff;
+}
+.au-wordmark { font-family: var(--font-display); font-size: 16px; font-weight: 800; color: var(--ink); letter-spacing: -0.02em; }
+.au-left-title {
+  font-family: var(--font-display); font-size: clamp(26px, 3vw, 34px); font-weight: 800; line-height: 1.14;
+  letter-spacing: -0.03em; color: var(--ink); margin-bottom: 14px;
+}
+.au-left-sub { font-size: 13.5px; line-height: 1.65; color: var(--ink-faint); margin-bottom: 26px; }
+
+.au-points { display: flex; flex-direction: column; gap: 15px; margin-bottom: 26px; }
+.au-point { display: flex; gap: 11px; align-items: flex-start; }
+.au-point > svg { color: var(--brand-text); margin-top: 2px; flex-shrink: 0; }
+.au-point strong { display: block; font-size: 13px; color: var(--ink); font-family: var(--font-display); }
+.au-point span { font-size: 12px; color: var(--ink-faint); line-height: 1.5; }
+
+.au-terminal { margin-top: auto; background: var(--code-bg); border: 1px solid var(--line-strong); border-radius: 12px; overflow: hidden; }
+.au-term-head {
+  display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08); font-family: 'Fira Code', monospace; font-size: 10.5px; color: #a3a3a3;
+}
+.au-dots { display: flex; gap: 5px; }
+.au-dots i { width: 8px; height: 8px; border-radius: 50%; background: #d4d4d4; }
+.au-dots i:nth-child(2) { background: #8a8a8a; }
+.au-dots i:nth-child(3) { background: #4a4a4a; }
+.au-term-body { padding: 12px 14px; font-family: 'Fira Code', monospace; font-size: 11.2px; line-height: 1.85; color: #e5e5e5; }
+.au-term-body p { margin: 0; }
+.au-prompt { color: #ffffff; }
+.au-out { color: #a3a3a3; }
+.au-cur { color: var(--brand-text); animation: auBlink 1.05s step-end infinite; }
+@keyframes auBlink { 50% { opacity: 0; } }
+
+.au-right { padding: 38px 34px; display: flex; flex-direction: column; justify-content: center; }
+.au-card-head h1 { font-family: var(--font-display); font-size: 25px; font-weight: 800; color: var(--ink); letter-spacing: -0.02em; }
+.au-card-head p { font-size: 13px; color: var(--ink-faint); margin: 6px 0 22px; line-height: 1.55; }
+
+.au-err, .au-good {
+  display: flex; align-items: center; gap: 8px; border-radius: 10px; padding: 10px 12px;
+  font-size: 12.2px; margin-bottom: 14px;
+}
+.au-err { background: rgba(74,74,74,0.08); border: 1px solid rgba(74,74,74,0.24); color: var(--bad); }
+.au-good { background: rgba(145,145,145,0.09); border: 1px solid rgba(145,145,145,0.26); color: var(--ok); }
+
+.au-form { display: flex; flex-direction: column; gap: 14px; }
+.au-field span {
+  display: block; font-family: 'Fira Code', monospace; font-size: 10.5px; text-transform: uppercase;
+  letter-spacing: 0.06em; font-weight: 700; color: var(--ink-faint); margin-bottom: 6px;
+}
+.au-field input {
+  width: 100%; box-sizing: border-box; background: var(--input-bg); border: 1px solid var(--line-strong);
+  border-radius: 10px; padding: 11px 13px; font-size: 13.5px; color: var(--ink); outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.au-field input::placeholder { color: var(--ink-faint); }
+.au-field input:focus { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+.au-field.au-bad input { border-color: var(--bad); }
+.au-field-row { display: flex !important; align-items: center; justify-content: space-between; }
+.au-match { display: inline-flex; align-items: center; gap: 4px; color: var(--ok); text-transform: none; letter-spacing: 0; font-size: 10.5px; }
+.au-pass { position: relative; }
+.au-pass input { padding-right: 40px; }
+.au-pass button {
+  position: absolute; right: 11px; top: 50%; transform: translateY(-50%); background: none; border: none;
+  color: var(--ink-faint); cursor: pointer; display: flex; padding: 0;
+}
+.au-pass button:hover { color: var(--ink); }
+
+.au-meter { display: flex; gap: 5px; margin-top: 8px; }
+.au-meter i { height: 4px; flex: 1; border-radius: 999px; background: var(--line-strong); transition: background 0.25s; }
+.au-meter-1 i:nth-child(-n+1) { background: var(--bad); }
+.au-meter-2 i:nth-child(-n+2) { background: var(--warn); }
+.au-meter-3 i:nth-child(-n+3) { background: var(--cyan); }
+.au-meter-4 i { background: var(--ok); }
+.au-meter-label { font-family: 'Fira Code', monospace; font-size: 10px; color: var(--ink-faint); margin-top: 6px; }
+
+.au-remember {
+  display: flex; align-items: center; gap: 9px; background: none; border: none; cursor: pointer;
+  font-size: 12.5px; color: var(--ink-faint); padding: 0; text-align: left; transition: color 0.2s;
+}
+.au-remember:hover { color: var(--ink-soft); }
+.au-check {
+  width: 16px; height: 16px; border-radius: 5px; border: 1.5px solid var(--line-strong); display: flex;
+  align-items: center; justify-content: center; color: transparent; transition: all 0.2s; flex-shrink: 0;
+}
+.au-on { color: var(--ink); }
+.au-on .au-check { background: var(--brand); border-color: var(--brand); color: #fff; }
+
+.au-submit {
+  width: 100%; background: var(--brand); color: #fff; border: none; border-radius: 11px; padding: 13px;
+  font-family: var(--font-display); font-size: 14px; font-weight: 700; cursor: pointer; display: flex;
+  align-items: center; justify-content: center; transition: filter 0.2s, transform 0.15s;
+  box-shadow: 0 12px 28px -14px var(--glow); margin-top: 2px;
+}
+.au-submit:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); }
+.au-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+.au-spin {
+  width: 17px; height: 17px; border: 2.5px solid rgba(255, 255, 255, 0.32); border-top-color: #fff;
+  border-radius: 50%; animation: auSpin 0.7s linear infinite;
+}
+@keyframes auSpin { to { transform: rotate(360deg); } }
+
+.au-quick { margin-top: 20px; padding-top: 16px; border-top: 1px dashed var(--line-strong); }
+.au-quick-label {
+  display: inline-flex; align-items: center; gap: 6px; font-family: 'Fira Code', monospace; font-size: 10px;
+  text-transform: uppercase; letter-spacing: 0.07em; color: var(--ink-faint); margin-bottom: 9px;
+}
+.au-pills { display: flex; gap: 8px; flex-wrap: wrap; }
+.au-pills button {
+  background: var(--brand-soft); border: 1px solid var(--brand-line); color: var(--brand-text);
+  font-family: 'Fira Code', monospace; font-size: 11.5px; font-weight: 700; padding: 6px 12px; border-radius: 999px;
+  cursor: pointer; transition: all 0.18s;
+}
+.au-pills button:hover { background: var(--brand-line); }
+
+.au-foot { text-align: center; font-size: 12.3px; color: var(--ink-faint); margin: 18px 0 0; line-height: 1.7; }
+.au-foot a { color: var(--brand-text); font-weight: 700; text-decoration: none; }
+.au-foot a:hover { text-decoration: underline; }
+.au-trust {
+  display: flex; align-items: center; justify-content: center; gap: 7px; margin-top: 14px;
+  font-size: 11.5px; color: var(--ink-faint);
+}
+
+/* ─── Refined-technical layer: hairline chrome, icon inputs, live rail ─── */
+
+.au-shell { animation: auRise 0.55s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes auRise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+/* registration ticks in the shell corners */
+.au-shell::before, .au-shell::after {
+  content: ''; position: absolute; width: 16px; height: 16px; pointer-events: none;
+  border-color: var(--brand-line); border-style: solid; border-width: 0;
+}
+.au-shell::before { top: 12px; left: 12px; border-top-width: 1px; border-left-width: 1px; border-top-left-radius: 6px; }
+.au-shell::after { bottom: 12px; right: 12px; border-bottom-width: 1px; border-right-width: 1px; border-bottom-right-radius: 6px; }
+
+/* runtime rail under the topbar */
+.au-rail {
+  position: fixed; top: 60px; left: 0; right: 0; z-index: 15;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 18px;
+  padding: 9px 16px; border-bottom: 1px solid var(--line);
+  background: var(--surface); backdrop-filter: blur(14px);
+  font-family: 'Fira Code', monospace; font-size: 10.5px; letter-spacing: 0.04em; color: var(--ink-faint);
+}
+.au-rail i { font-style: normal; color: var(--line-strong); }
+.au-rail b { font-weight: 700; color: var(--ink-soft); }
+.au-live { display: inline-flex; align-items: center; gap: 6px; color: var(--ok); }
+.au-live::before {
+  content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--ok);
+  box-shadow: 0 0 0 0 var(--ok); animation: auPing 2s ease-out infinite;
+}
+.au-rail.au-down .au-live { color: var(--warn); }
+.au-rail.au-down .au-live::before { background: var(--warn); }
+@keyframes auPing { 0% { box-shadow: 0 0 0 0 rgba(173,173,173,0.5); } 70% { box-shadow: 0 0 0 7px rgba(173,173,173,0); } 100% { box-shadow: 0 0 0 0 rgba(173,173,173,0); } }
+
+.au-screen { padding-top: 92px; }
+
+/* inputs with a leading glyph */
+.au-in { position: relative; display: block; }
+.au-in > svg {
+  position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+  color: var(--ink-faint); pointer-events: none; transition: color 0.2s;
+}
+.au-in input { padding-left: 36px !important; }
+.au-in:focus-within > svg { color: var(--brand-text); }
+.au-pass .au-in > svg { left: 12px; }
+
+/* focus glow + hairline refinement */
+.au-field input { background: var(--surface-3); }
+.au-field input:hover { border-color: var(--brand-line); }
+.au-field input:focus { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft), inset 0 0 0 1px var(--brand-line); }
+
+/* submit gets a hairline arrow and a sheen sweep */
+.au-submit { position: relative; overflow: hidden; letter-spacing: -0.01em; }
+.au-submit::after {
+  content: ''; position: absolute; inset: 0; transform: translateX(-110%);
+  background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.28) 50%, transparent 70%);
+  transition: transform 0.65s ease;
+}
+.au-submit:hover:not(:disabled)::after { transform: translateX(110%); }
+.au-submit .au-arrow { transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.au-submit:hover:not(:disabled) .au-arrow { transform: translateX(4px); }
+
+/* mono keycap hint */
+.au-kbd {
+  font-family: 'Fira Code', monospace; font-size: 10px; color: var(--ink-faint);
+  border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 5px; padding: 1px 5px; background: var(--surface-3);
+}
+.au-hint { display: flex; align-items: center; justify-content: center; gap: 7px; margin-top: 10px; font-size: 11.5px; color: var(--ink-faint); }
+
+/* left panel: index numbers on the point list */
+.au-point { position: relative; padding-left: 26px; }
+.au-point::before {
+  content: '§' attr(data-idx); position: absolute; left: 0; top: 1px;
+  font-family: 'Fira Code', monospace; font-size: 9.5px; color: var(--ink-faint); letter-spacing: 0.02em;
+}
+
+/* terminal scanline sheen */
+.au-terminal::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0.5;
+  background: repeating-linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 0 1px, transparent 1px 3px);
+}
+.au-terminal { position: relative; }
+
+@media (max-width: 880px) {
+  .au-shell { grid-template-columns: 1fr; }
+  .au-left { border-right: none; border-bottom: 1px solid var(--line); padding: 30px 24px; }
+  .au-terminal { display: none; }
+  .au-right { padding: 30px 24px; }
+}
+@media (max-width: 520px) {
+  .au-screen { padding: 128px 12px 24px; }
+  .au-left-title { font-size: 26px; }
+  .au-right, .au-left { padding: 26px 20px; }
+  .au-rail { font-size: 9.5px; gap: 6px 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .au-shell { animation: none; }
+  .au-submit::after { display: none; }
+  .au-live::before { animation: none; }
+}
+

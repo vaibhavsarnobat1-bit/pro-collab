@@ -1,999 +1,1112 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
+import { useNotifications } from '../context/NotificationContext';
+import { useTheme } from '../context/ThemeContext';
 import api from '../services/api';
+import { makeGuestHandle } from '../lib/presence';
+import { readFilesForRoom, pickFiles, downloadProjectZip } from '../lib/projectIO';
 import SharedEditor from '../components/SharedEditor';
 import FileExplorer from '../components/FileExplorer';
 import ChatPanel from '../components/ChatPanel';
 import ActivityLogPanel from '../components/ActivityLogPanel';
 import VideoCallContainer from '../components/VideoCallContainer';
 import LivePreviewPanel from '../components/LivePreviewPanel';
+import AiAssistantPanel from '../components/AiAssistantPanel';
+import '../styles/workspace.css';
 import {
-  Monitor, Video, MessageSquare, Activity, Copy, Check, Users, Sparkles,
-  Code2, X, Settings, Bell, Search, PanelLeftClose, PanelLeft, HardDrive,
-  FolderTree, RefreshCw, Play, Square, Layout, Layers, Maximize2, Minimize2
+  PanelLeftClose, PanelLeft, Check, Users, MessageSquare, Activity,
+  Sparkles, Code2, Video, Play, Square, Lock, X, HardDrive, FolderTree,
+  ShieldAlert, Link2
 } from 'lucide-react';
 
-// Start with NO default files — workspace is clean until user opens their folder
-const DEFAULT_FILES = {};
-
-
-const getLanguageFromPath = (filePath = '') => {
-  const ext = filePath.split('.').pop()?.toLowerCase();
-  const map = {
-    js: 'javascript',
-    jsx: 'javascript',
-    ts: 'typescript',
-    tsx: 'typescript',
-    py: 'python',
-    html: 'html',
-    css: 'css',
-    json: 'json',
-    md: 'markdown',
-    cpp: 'cpp',
-    c: 'c',
-    h: 'cpp',
-    rs: 'rust',
-    go: 'go',
-    java: 'java'
-  };
-  return map[ext] || 'plaintext';
+const EXT_LANGUAGES = {
+  js: 'javascript', mjs: 'javascript', cjs: 'javascript', jsx: 'javascript',
+  ts: 'typescript', tsx: 'typescript',
+  py: 'python', html: 'html', htm: 'html', css: 'css', scss: 'css',
+  json: 'json', md: 'markdown', markdown: 'markdown',
+  cpp: 'cpp', cc: 'cpp', c: 'c', h: 'cpp', hpp: 'cpp',
+  rs: 'rust', go: 'go', java: 'java', sql: 'sql',
+  sh: 'shell', bash: 'shell', yml: 'yaml', yaml: 'yaml', xml: 'xml', txt: 'plaintext'
 };
 
-const WorkspacePage = () => {
+const getLanguageFromPath = (filePath = '') => {
+  const ext = filePath.split('.').pop()?.toLowerCase() || '';
+  return EXT_LANGUAGES[ext] || 'plaintext';
+};
+
+// Room files are a flat path → file map, so the tree is derived rather than
+// stored. That keeps renames and deletes from drifting out of sync with content.
+const buildTree = (filesMap) => {
+  const root = [];
+  const directories = new Map();
+
+  const ensureDir = (path) => {
+    if (directories.has(path)) return directories.get(path);
+    const segments = path.split('/');
+    const name = segments.pop();
+    const parentPath = segments.join('/');
+    const node = { name, path, isDirectory: true, children: [] };
+    directories.set(path, node);
+    if (parentPath) ensureDir(parentPath).children.push(node);
+    else root.push(node);
+    return node;
+  };
+
+  Object.values(filesMap).forEach((file) => {
+    const segments = file.path.split('/');
+    const name = segments.pop();
+    const parentPath = segments.join('/');
+    const leaf = { name, path: file.path, isDirectory: false, language: file.language || getLanguageFromPath(file.path) };
+    if (parentPath) ensureDir(parentPath).children.push(leaf);
+    else root.push(leaf);
+  });
+
+  const sortNodes = (nodes) => {
+    nodes.sort((a, b) => {
+      if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+    nodes.forEach((node) => node.isDirectory && sortNodes(node.children));
+    return nodes;
+  };
+
+  return sortNodes(root);
+};
+
+const STARTER_HTML = `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>New page</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <h1>Hello</h1>
+    <script src="app.js"></script>
+  </body>
+</html>
+`;
+
+const WorkspacePage = ({ guestMode = false }) => {
   const { roomId: paramRoomId } = useParams();
-  const roomId = paramRoomId || 'default-room';
-  
+  const roomId = paramRoomId || 'lobby';
+
   const { user } = useAuth();
   const { socket } = useSocket();
+  const { notify } = useNotifications();
+  const { theme } = useTheme();
   const navigate = useNavigate();
 
-  // Multi-File & Explorer States — start completely empty
+  const identity = useMemo(() => {
+    if (guestMode) return { username: makeGuestHandle(), id: null, role: 'guest' };
+    return user ? { username: user.username, id: user.id, role: user.role } : null;
+  }, [user, guestMode]);
+
+  const isAdmin = identity?.role === 'admin';
+
+  /* ------------------------------------------------------------- files */
+
   const [filesMap, setFilesMap] = useState({});
-  const [fileTree, setFileTree] = useState([]);
   const [openFiles, setOpenFiles] = useState([]);
   const [activeFilePath, setActiveFilePath] = useState(null);
-  const [showExplorer, setShowExplorer] = useState(true);
-  const [isLocalDiskSync, setIsLocalDiskSync] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [isTreeLoading, setIsTreeLoading] = useState(false);
 
-  // Stores FileSystemFileHandle for each file so we can read content on-demand
-  const fileHandlesMap = useRef({});
+  // Two deliberately separate sources of truth:
+  //   room   — collaborative buffers the server holds for this room
+  //   folder — a real directory the visitor picked with the File System Access API
+  // The earlier design let the server's /api/fs tree overwrite a folder the
+  // visitor had picked, which is why file operations looked like they vanished.
+  const [source, setSource] = useState('room');
+  const fileHandles = useRef({});
+  const dirHandles = useRef({});
+  const folderRoot = useRef('');
+  const [localTree, setLocalTree] = useState([]);
 
-  // On-demand Live Web Run Preview state (Default hidden)
-  const [showLivePreview, setShowLivePreview] = useState(false);
-  const [isVideoMaximized, setIsVideoMaximized] = useState(false);
+  /* -------------------------------------------------------------- room */
 
-  // General Room States
   const [activeUsers, setActiveUsers] = useState([]);
+  const [peers, setPeers] = useState([]);
   const [logs, setLogs] = useState([]);
   const [messages, setMessages] = useState([]);
   const [privateMessages, setPrivateMessages] = useState([]);
-  const [copied, setCopied] = useState(false);
-  
-  // Workspace Modes: 'editor' | 'split' (Code + Video) | 'video' (Full HD Call)
-  const [activeTab, setActiveTab] = useState('editor');
-  const [isVideoCallActive, setIsVideoCallActive] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
+  const [roomMeta, setRoomMeta] = useState(null);
+  const [lockState, setLockState] = useState('checking');
+  const [roomPassword, setRoomPassword] = useState('');
   const [connectionStatus, setConnectionStatus] = useState('connecting');
 
-  // Convert flat filesMap into a tree structure for fallback
-  const generateTreeFromFilesMap = (files) => {
-    return Object.values(files).map((f) => ({
-      name: f.name || f.path,
-      path: f.path,
-      isDirectory: false,
-      language: f.language
-    }));
-  };
+  /* ---------------------------------------------------------------- ui */
 
-  // Fetch Local Disk Workspace Tree (from VS Code / Antigravity directory)
-  const fetchLocalWorkspaceTree = async () => {
-    setIsTreeLoading(true);
+  const [showExplorer, setShowExplorer] = useState(true);
+  // Preview starts open: the point of the workspace is seeing the page change
+  // beside the code, not hunting for a tab first.
+  const [showPreview, setShowPreview] = useState(true);
+  const [isImporting, setIsImporting] = useState(false);
+  const [showVideo, setShowVideo] = useState(false);
+  const [videoMaximized, setVideoMaximized] = useState(false);
+  const [rightPanel, setRightPanel] = useState('chat');
+  const [copied, setCopied] = useState(false);
+  const [saveTarget, setSaveTarget] = useState(false);
+  const [snippetTitle, setSnippetTitle] = useState('');
+
+  const pushFeed = useCallback((text, tone = 'info') => {
+    window.dispatchEvent(new CustomEvent('pc:nav-feed', { detail: { text, tone } }));
+  }, []);
+
+  /* ----------------------------------------------------- room bootstrap */
+
+  const loadRoom = useCallback(async (password) => {
     try {
-      const response = await api.get('/fs/tree');
-      if (response.data.tree) {
-        setFileTree(response.data.tree);
-        setIsLocalDiskSync(true);
+      const response = await api.get(`/rooms/${encodeURIComponent(roomId)}`, {
+        params: password ? { password } : undefined
+      });
+
+      const { room, meta, logs: serverLogs, messages: serverMessages } = response.data;
+      setRoomMeta(meta || { roomId, title: room?.title || roomId, isPrivate: false });
+      setLockState('open');
+
+      const roomFiles = room?.files || {};
+      const paths = Object.keys(roomFiles);
+      if (paths.length) {
+        setFilesMap(roomFiles);
+        const preferred = room?.activeFile && roomFiles[room.activeFile]
+          ? room.activeFile
+          : paths.find((path) => /\.(html|jsx|tsx|js|ts|py|md)$/i.test(path)) || paths[0];
+        setActiveFilePath(preferred);
+        setOpenFiles([roomFiles[preferred]]);
+      } else {
+        setFilesMap({});
+        setOpenFiles([]);
+        setActiveFilePath(null);
       }
-    } catch (err) {
-      console.warn('Could not load local filesystem tree, using room files:', err.message);
-      setIsLocalDiskSync(false);
-    } finally {
-      setIsTreeLoading(false);
+      setLogs(serverLogs || []);
+      setMessages(serverMessages || []);
+    } catch (error) {
+      if (error.response?.status === 401) {
+        setRoomMeta(error.response.data.room || null);
+        setLockState(password === '' ? 'locked' : 'rejected');
+        return;
+      }
+      setLockState('error');
+      notify(error.response?.data?.message || 'This room could not be loaded', { type: 'error' });
     }
-  };
+  }, [roomId, notify]);
 
-  // Initial Room Data Load (no default files fallback)
   useEffect(() => {
-    const fetchRoomData = async () => {
-      try {
-        const response = await api.get(`/rooms/${roomId}`);
-        if (response.data.room) {
-          const roomFiles = response.data.room.files || {};
-          if (Object.keys(roomFiles).length > 0) {
-            setFilesMap(roomFiles);
-            if (!isLocalDiskSync) {
-              setFileTree(generateTreeFromFilesMap(roomFiles));
-            }
-          }
-        }
-        if (response.data.logs) setLogs(response.data.logs);
-        if (response.data.messages) setMessages(response.data.messages);
-      } catch (err) {
-        console.error('Failed to load room data:', err);
-      }
-    };
+    setLockState('checking');
+    setSource('room');
+    setLocalTree([]);
+    loadRoom('');
+  }, [loadRoom]);
 
-    fetchRoomData();
-    // Note: fetchLocalWorkspaceTree() is NOT called on startup.
-    // Files only load when the user explicitly clicks "Open Folder".
-  }, [roomId]);
+  /* --------------------------------------------------- socket presence */
 
+  const joinedRef = useRef(false);
 
-  // Socket setup & Event listeners
   useEffect(() => {
-    if (!socket || !user) return;
+    if (!socket || !identity || lockState !== 'open') return;
 
-    socket.emit('join-room', { roomId, user });
-
-    socket.on('connect', () => setConnectionStatus('connected'));
-    socket.on('disconnect', () => setConnectionStatus('disconnected'));
-    socket.on('connect_error', () => setConnectionStatus('error'));
-
-    // Multi-File Code Update from other peers
-    socket.on('code-updated', ({ filePath = 'index.html', content }) => {
-      setFilesMap((prev) => {
-        const existing = prev[filePath] || { name: filePath.split('/').pop(), path: filePath, language: getLanguageFromPath(filePath) };
-        return {
-          ...prev,
-          [filePath]: { ...existing, content }
-        };
-      });
-    });
-
-    // Language Update
-    socket.on('language-updated', ({ filePath = 'index.html', language: newLang }) => {
-      setFilesMap((prev) => {
-        if (!prev[filePath]) return prev;
-        return {
-          ...prev,
-          [filePath]: { ...prev[filePath], language: newLang }
-        };
-      });
-    });
-
-    // File Operations broadcasts
-    socket.on('file-created-broadcast', ({ file }) => {
-      if (!file) return;
-      setFilesMap((prev) => ({ ...prev, [file.path]: file }));
-      if (isLocalDiskSync) {
-        fetchLocalWorkspaceTree();
-      } else {
-        setFileTree((prev) => [...prev, { name: file.name, path: file.path, isDirectory: false, language: file.language }]);
+    socket.emit('join-room', { roomId, password: roomPassword }, (response) => {
+      if (!response?.ok) {
+        joinedRef.current = false;
+        setLockState(response?.reason === 'password_incorrect' ? 'rejected' : 'locked');
+        return;
       }
-    });
-
-    socket.on('file-deleted-broadcast', ({ filePath }) => {
-      setFilesMap((prev) => {
-        const next = { ...prev };
-        delete next[filePath];
-        return next;
-      });
-      setOpenFiles((prev) => prev.filter((f) => f.path !== filePath));
-      if (isLocalDiskSync) {
-        fetchLocalWorkspaceTree();
-      } else {
-        setFileTree((prev) => prev.filter((f) => f.path !== filePath));
-      }
-    });
-
-    socket.on('file-renamed-broadcast', ({ oldPath, newPath }) => {
-      setFilesMap((prev) => {
-        const next = { ...prev };
-        if (next[oldPath]) {
-          const file = next[oldPath];
-          delete next[oldPath];
-          file.path = newPath;
-          file.name = newPath.split('/').pop();
-          next[newPath] = file;
-        }
-        return next;
-      });
-      setOpenFiles((prev) =>
-        prev.map((f) => (f.path === oldPath ? { ...f, path: newPath, name: newPath.split('/').pop() } : f))
-      );
-      if (activeFilePath === oldPath) {
-        setActiveFilePath(newPath);
-      }
-      if (isLocalDiskSync) {
-        fetchLocalWorkspaceTree();
-      }
-    });
-
-    socket.on('room-users-updated', (users) => setActiveUsers(users));
-    socket.on('activity-logged', (newLog) => setLogs((prev) => [newLog, ...prev]));
-    
-    // Group Message
-    socket.on('receive-message', (msgObj) => setMessages((prev) => [...prev, msgObj]));
-
-    // 1-on-1 Private Direct Message
-    socket.on('receive-private-message', (dmObj) => {
-      if (dmObj.recipient === user.username || dmObj.sender === user.username) {
-        setPrivateMessages((prev) => [...prev, dmObj]);
-      }
+      joinedRef.current = true;
+      setActiveUsers(response.users || []);
     });
 
     return () => {
-      socket.off('connect');
-      socket.off('disconnect');
-      socket.off('connect_error');
-      socket.off('code-updated');
-      socket.off('language-updated');
-      socket.off('file-created-broadcast');
-      socket.off('file-deleted-broadcast');
-      socket.off('file-renamed-broadcast');
-      socket.off('room-users-updated');
-      socket.off('activity-logged');
-      socket.off('receive-message');
-      socket.off('receive-private-message');
+      if (joinedRef.current) socket.emit('leave-room', { roomId });
+      joinedRef.current = false;
     };
-  }, [socket, roomId, user, activeFilePath, isLocalDiskSync]);
+  }, [socket, roomId, identity, lockState, roomPassword]);
 
-  // Active File Data — only when a file is actually selected
-  const currentFile = activeFilePath
-    ? (filesMap[activeFilePath] || {
-        name: activeFilePath.split('/').pop(),
-        path: activeFilePath,
-        language: getLanguageFromPath(activeFilePath),
-        content: ''
-      })
-    : null;
+  useEffect(() => {
+    if (!socket) return;
 
-  // Code change in active file
-  const handleCodeChange = (newContent, lineNumber) => {
+    const onConnect = () => setConnectionStatus('connected');
+    const onDisconnect = () => setConnectionStatus('disconnected');
+    const onConnectError = () => setConnectionStatus('error');
+    const onUsers = (users) => setActiveUsers(users);
+
+    const onActivity = (log) => {
+      if (!log) return;
+      setLogs((prev) => [log, ...prev].slice(0, 200));
+      if (log.username && log.username !== identity?.username) {
+        pushFeed(log.details || `${log.username} made a change`, 'event');
+      }
+    };
+
+    const onFileCreated = ({ file }) => {
+      if (!file) return;
+      setFilesMap((prev) => (prev[file.path] ? prev : { ...prev, [file.path]: file }));
+    };
+
+    const dropPath = (path) => (candidate) => candidate === path || candidate.startsWith(`${path}/`);
+
+    const onFileDeleted = ({ filePath }) => {
+      const matches = dropPath(filePath);
+      setFilesMap((prev) => Object.fromEntries(Object.entries(prev).filter(([path]) => !matches(path))));
+      setOpenFiles((prev) => prev.filter((f) => !matches(f.path)));
+      setActiveFilePath((current) => (matches(current) ? null : current));
+    };
+
+    const onFileRenamed = ({ oldPath, newPath }) => {
+      const matches = dropPath(oldPath);
+      const relocate = (path) => (path === oldPath ? newPath : newPath + path.slice(oldPath.length));
+
+      setFilesMap((prev) => {
+        const next = {};
+        Object.entries(prev).forEach(([path, file]) => {
+          if (!matches(path)) { next[path] = file; return; }
+          const target = relocate(path);
+          next[target] = { ...file, path: target, name: target.split('/').pop() };
+        });
+        return next;
+      });
+      setOpenFiles((prev) => prev.map((f) => (matches(f.path)
+        ? { ...f, path: relocate(f.path), name: relocate(f.path).split('/').pop() }
+        : f)));
+      setActiveFilePath((current) => (matches(current) ? relocate(current) : current));
+    };
+
+    const onLanguage = ({ filePath, language }) => {
+      setFilesMap((prev) => (prev[filePath] ? { ...prev, [filePath]: { ...prev[filePath], language } } : prev));
+    };
+
+    const onMessage = (message) => {
+      setMessages((prev) => [...prev, message]);
+      if (message.sender && message.sender !== identity?.username) {
+        pushFeed(`${message.sender}: ${message.text}`, 'chat');
+        if (document.hidden) notify(`${message.sender}: ${message.text}`, { title: `#${roomId}`, type: 'event' });
+      }
+    };
+
+    const onPrivate = (message) => {
+      if (message.recipient !== identity?.username && message.sender !== identity?.username) return;
+      setPrivateMessages((prev) => [...prev, message]);
+      if (message.recipient === identity?.username) {
+        notify(message.text, { title: `Private message from ${message.sender}`, type: 'event' });
+      }
+    };
+
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
+    socket.on('connect_error', onConnectError);
+    socket.on('room-users-updated', onUsers);
+    socket.on('activity-logged', onActivity);
+    socket.on('file-created-broadcast', onFileCreated);
+    socket.on('file-deleted-broadcast', onFileDeleted);
+    socket.on('file-renamed-broadcast', onFileRenamed);
+    socket.on('language-updated', onLanguage);
+    socket.on('receive-message', onMessage);
+    socket.on('receive-private-message', onPrivate);
+
+    return () => {
+      socket.off('connect', onConnect);
+      socket.off('disconnect', onDisconnect);
+      socket.off('connect_error', onConnectError);
+      socket.off('room-users-updated', onUsers);
+      socket.off('activity-logged', onActivity);
+      socket.off('file-created-broadcast', onFileCreated);
+      socket.off('file-deleted-broadcast', onFileDeleted);
+      socket.off('file-renamed-broadcast', onFileRenamed);
+      socket.off('language-updated', onLanguage);
+      socket.off('receive-message', onMessage);
+      socket.off('receive-private-message', onPrivate);
+    };
+  }, [socket, roomId, identity, pushFeed, notify]);
+
+  /* ----------------------------------------------------- derived state */
+
+  const fileTree = useMemo(() => buildTree(filesMap), [filesMap]);
+  const currentFile = activeFilePath ? filesMap[activeFilePath] : null;
+  const tree = source === 'folder' ? localTree : fileTree;
+
+  /* --------------------------------------------------------- editing */
+
+  const handleCodeChange = useCallback((value, changes, filePath) => {
     setIsDirty(true);
-    setFilesMap((prev) => ({
-      ...prev,
-      [activeFilePath]: {
-        ...currentFile,
-        content: newContent
-      }
-    }));
+    setFilesMap((prev) => (prev[filePath] ? { ...prev, [filePath]: { ...prev[filePath], content: value } } : prev));
+    void changes;
+  }, []);
 
-    if (socket) {
-      socket.emit('code-change', {
-        roomId,
-        filePath: activeFilePath,
-        content: newContent,
-        lineNumber,
-        language: currentFile.language
-      });
-    }
-  };
+  const handleLanguageChange = useCallback((newLanguage) => {
+    if (!activeFilePath) return;
+    setFilesMap((prev) => ({ ...prev, [activeFilePath]: { ...prev[activeFilePath], language: newLanguage } }));
+    socket?.emit('language-change', { roomId, filePath: activeFilePath, language: newLanguage });
+  }, [activeFilePath, socket, roomId]);
 
-  // Language change for active file
-  const handleLanguageChange = (newLang) => {
-    setFilesMap((prev) => ({
-      ...prev,
-      [activeFilePath]: {
-        ...currentFile,
-        language: newLang
-      }
-    }));
+  const writeBackToFolder = useCallback(async (filePath, content) => {
+    const handle = fileHandles.current[filePath];
+    if (!handle?.createWritable) return false;
+    const writable = await handle.createWritable({ keepExistingData: false });
+    await writable.write(content);
+    await writable.close();
+    return true;
+  }, []);
 
-    if (socket) {
-      socket.emit('language-change', {
-        roomId,
-        filePath: activeFilePath,
-        language: newLang
-      });
-    }
-  };
-
-  // Select a file from File Explorer — read content directly from browser file handle
-  const handleSelectFile = async (item) => {
-    if (item.isDirectory) return;
-
-    const path = item.path;
-    setActiveFilePath(path);
-
-    // If we already loaded this file's content, just switch to it
-    if (filesMap[path] && filesMap[path].content !== undefined) {
-      setOpenFiles((prev) => {
-        if (!prev.some((f) => f.path === path)) {
-          return [...prev, filesMap[path]];
-        }
-        return prev;
-      });
+  const handleSaveActiveFile = useCallback(async () => {
+    if (!currentFile) {
+      notify('Open a file first', { type: 'error' });
       return;
     }
-
-    // Try reading via stored FileSystemFileHandle (browser File System Access API)
-    const handle = fileHandlesMap.current[path];
-    if (handle) {
-      try {
-        const file = await handle.getFile();
-        const content = await file.text();
-        const fileData = {
-          name: item.name || path.split('/').pop(),
-          path,
-          language: getLanguageFromPath(path),
-          content
-        };
-        setFilesMap((prev) => ({ ...prev, [path]: fileData }));
-        setOpenFiles((prev) => {
-          const without = prev.filter((f) => f.path !== path);
-          return [...without, fileData];
-        });
-        return;
-      } catch (err) {
-        console.error('Error reading file from handle:', err);
-      }
-    }
-
-    // Fallback: try backend API (for server-side disk sync)
-    if (isLocalDiskSync) {
-      try {
-        const response = await api.get(`/fs/file?filePath=${encodeURIComponent(path)}`);
-        const fileData = {
-          name: response.data.name || path.split('/').pop(),
-          path: response.data.path || path,
-          language: response.data.language || getLanguageFromPath(path),
-          content: response.data.content !== undefined ? response.data.content : ''
-        };
-        setFilesMap((prev) => ({ ...prev, [path]: fileData }));
-        setOpenFiles((prev) => {
-          const without = prev.filter((f) => f.path !== path);
-          return [...without, fileData];
-        });
-        return;
-      } catch (err) {
-        console.error('Error fetching file from server:', err);
-      }
-    }
-
-    // Last resort: open as empty file
-    const fileData = {
-      name: item.name || path.split('/').pop(),
-      path,
-      language: getLanguageFromPath(path),
-      content: ''
-    };
-    setFilesMap((prev) => ({ ...prev, [path]: fileData }));
-    setOpenFiles((prev) => {
-      if (!prev.some((f) => f.path === path)) return [...prev, fileData];
-      return prev;
-    });
-
-    if (socket) {
-      socket.emit('file-select', { roomId, filePath: path });
-    }
-  };
-
-  // Select Open Tab
-  const handleSelectTab = (path) => {
-    setActiveFilePath(path);
-    if (socket) {
-      socket.emit('file-select', { roomId, filePath: path });
-    }
-  };
-
-  // Close Tab
-  const handleCloseTab = (path) => {
-    const nextOpen = openFiles.filter((f) => f.path !== path);
-    setOpenFiles(nextOpen);
-    if (activeFilePath === path && nextOpen.length > 0) {
-      setActiveFilePath(nextOpen[nextOpen.length - 1].path);
-    }
-  };
-
-  // Save Active File to Local Disk & Room Store
-  const handleSaveActiveFile = async () => {
     setIsSaving(true);
     try {
-      if (isLocalDiskSync) {
-        await api.post('/fs/save', {
-          filePath: activeFilePath,
-          content: currentFile.content
+      if (source === 'folder') {
+        const written = await writeBackToFolder(currentFile.path, currentFile.content ?? '');
+        notify(written ? 'Saved to your folder' : 'That folder is read-only, so the change stays in the editor', {
+          type: written ? 'success' : 'warn'
         });
+      } else {
+        socket?.emit('code-change', { roomId, filePath: currentFile.path, content: currentFile.content ?? '' });
+        notify('Room buffer saved', { type: 'success' });
       }
       setIsDirty(false);
-    } catch (err) {
-      console.error('Save to disk error:', err);
+    } catch (error) {
+      notify(error.message || 'Save failed', { type: 'error' });
     } finally {
       setIsSaving(false);
     }
-  };
+  }, [currentFile, source, socket, roomId, notify, writeBackToFolder]);
 
-  // Create New File
-  const handleCreateFile = async (targetPath, initialContent = '') => {
-    const cleanPath = targetPath.replace(/\\/g, '/');
-    const lang = getLanguageFromPath(cleanPath);
-    const content = initialContent || `// New file: ${cleanPath}\n`;
+  /* -------------------------------------------------------- file ops */
 
-    try {
-      if (isLocalDiskSync) {
-        await api.post('/fs/create', {
-          targetPath: cleanPath,
-          isDirectory: false,
-          initialContent: content
-        });
-        await fetchLocalWorkspaceTree();
-      }
+  const openFile = useCallback((file) => {
+    setFilesMap((prev) => ({ ...prev, [file.path]: { ...(prev[file.path] || {}), ...file } }));
+    setOpenFiles((prev) => (prev.some((f) => f.path === file.path) ? prev : [...prev, file]));
+    setActiveFilePath(file.path);
+    socket?.emit('file-select', { roomId, filePath: file.path });
+  }, [socket, roomId]);
 
-      const newFileObj = {
-        name: cleanPath.split('/').pop(),
-        path: cleanPath,
-        language: lang,
-        content
-      };
+  const handleSelectFile = useCallback(async (item) => {
+    if (item.isDirectory) return;
+    const path = item.path;
 
-      setFilesMap((prev) => ({ ...prev, [cleanPath]: newFileObj }));
-      setOpenFiles((prev) => {
-        if (!prev.some((f) => f.path === cleanPath)) {
-          return [...prev, newFileObj];
-        }
-        return prev;
-      });
-      setActiveFilePath(cleanPath);
-
-      if (socket) {
-        socket.emit('file-create', {
-          roomId,
-          filePath: cleanPath,
-          content,
-          language: lang
-        });
-      }
-    } catch (err) {
-      console.error('Error creating file:', err);
-    }
-  };
-
-  // Create New Folder
-  const handleCreateFolder = async (targetPath) => {
-    const cleanPath = targetPath.replace(/\\/g, '/');
-    try {
-      if (isLocalDiskSync) {
-        await api.post('/fs/create', {
-          targetPath: cleanPath,
-          isDirectory: true
-        });
-        await fetchLocalWorkspaceTree();
-      }
-    } catch (err) {
-      console.error('Error creating folder:', err);
-    }
-  };
-
-  // Rename File / Folder
-  const handleRenameItem = async (oldPath, newPath) => {
-    try {
-      if (isLocalDiskSync) {
-        await api.post('/fs/rename', { oldPath, newPath });
-        await fetchLocalWorkspaceTree();
-      }
-
-      setFilesMap((prev) => {
-        const next = { ...prev };
-        if (next[oldPath]) {
-          const file = next[oldPath];
-          delete next[oldPath];
-          file.path = newPath;
-          file.name = newPath.split('/').pop();
-          next[newPath] = file;
-        }
-        return next;
-      });
-
-      setOpenFiles((prev) =>
-        prev.map((f) => (f.path === oldPath ? { ...f, path: newPath, name: newPath.split('/').pop() } : f))
-      );
-
-      if (activeFilePath === oldPath) {
-        setActiveFilePath(newPath);
-      }
-
-      if (socket) {
-        socket.emit('file-rename', { roomId, oldPath, newPath });
-      }
-    } catch (err) {
-      console.error('Error renaming item:', err);
-    }
-  };
-
-  // Delete File / Folder
-  const handleDeleteItem = async (targetPath) => {
-    try {
-      if (isLocalDiskSync) {
-        await api.post('/fs/delete', { targetPath });
-        await fetchLocalWorkspaceTree();
-      }
-
-      setFilesMap((prev) => {
-        const next = { ...prev };
-        delete next[targetPath];
-        return next;
-      });
-
-      setOpenFiles((prev) => prev.filter((f) => f.path !== targetPath));
-      if (activeFilePath === targetPath) {
-        const remaining = openFiles.filter((f) => f.path !== targetPath);
-        if (remaining.length > 0) {
-          setActiveFilePath(remaining[0].path);
-        }
-      }
-
-      if (socket) {
-        socket.emit('file-delete', { roomId, filePath: targetPath });
-      }
-    } catch (err) {
-      console.error('Error deleting item:', err);
-    }
-  };
-
-  // Open Local Folder via File System Access API — stores file handles for on-demand reading
-  const handleOpenCustomLocalFolder = async () => {
-    if (!window.showDirectoryPicker) {
-      alert('Please use Google Chrome or Edge to use the folder picker.');
+    if (filesMap[path]?.content !== undefined) {
+      setOpenFiles((prev) => (prev.some((f) => f.path === path) ? prev : [...prev, filesMap[path]]));
+      setActiveFilePath(path);
+      socket?.emit('file-select', { roomId, filePath: path });
       return;
     }
 
+    if (source === 'folder' && fileHandles.current[path]) {
+      try {
+        const file = await fileHandles.current[path].getFile();
+        openFile({ name: item.name, path, language: getLanguageFromPath(path), content: await file.text() });
+        return;
+      } catch {
+        notify(`Could not read ${item.name} from disk`, { type: 'error' });
+        return;
+      }
+    }
+
+    openFile({ name: item.name, path, language: getLanguageFromPath(path), content: '' });
+  }, [filesMap, source, openFile, notify, socket, roomId]);
+
+  const handleCreateFile = useCallback(async (targetPath, initialContent = '') => {
+    const cleanPath = String(targetPath).replace(/\\/g, '/').replace(/^\/+/, '');
+    if (!cleanPath) return;
+    if (filesMap[cleanPath]) {
+      notify('A file with that name already exists here', { type: 'error' });
+      return;
+    }
+
+    const file = {
+      name: cleanPath.split('/').pop(),
+      path: cleanPath,
+      language: getLanguageFromPath(cleanPath),
+      content: initialContent
+    };
+
+    if (source === 'folder') {
+      try {
+        const segments = cleanPath.split('/');
+        const name = segments.pop();
+        let parent = dirHandles.current[folderRoot.current];
+        for (const segment of segments) {
+          parent = await parent.getDirectoryHandle(segment, { create: true });
+        }
+        fileHandles.current[cleanPath] = await parent.getFileHandle(name, { create: true });
+      } catch {
+        notify('Could not create that file on disk — permission may have expired', { type: 'error' });
+        return;
+      }
+    } else {
+      socket?.emit('file-create', { roomId, filePath: cleanPath, content: initialContent, language: file.language });
+    }
+
+    openFile(file);
+  }, [filesMap, source, socket, roomId, openFile, notify]);
+
+  const handleCreateFolder = useCallback(async (targetPath) => {
+    const cleanPath = String(targetPath).replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    if (!cleanPath) return;
+    if (source !== 'folder') {
+      notify('Rooms hold a flat file list — type a path like src/app.js to group files', { type: 'info' });
+      return;
+    }
+    try {
+      let parent = dirHandles.current[folderRoot.current];
+      for (const segment of cleanPath.split('/')) {
+        parent = await parent.getDirectoryHandle(segment, { create: true });
+      }
+      notify(`${cleanPath} created`, { type: 'success' });
+    } catch {
+      notify('Could not create that folder', { type: 'error' });
+    }
+  }, [source, notify]);
+
+  const handleRenameItem = useCallback((oldPath, newPath) => {
+    const cleanPath = String(newPath).replace(/\\/g, '/').replace(/^\/+/, '');
+    if (!cleanPath || cleanPath === oldPath) return;
+
+    if (source === 'folder') {
+      notify('Renaming files inside your own folder is disabled here — rename them in your OS and reopen', { type: 'warn' });
+      return;
+    }
+
+    setFilesMap((prev) => {
+      const next = { ...prev };
+      const file = next[oldPath];
+      if (!file) return prev;
+      delete next[oldPath];
+      next[cleanPath] = { ...file, path: cleanPath, name: cleanPath.split('/').pop(), language: getLanguageFromPath(cleanPath) };
+      return next;
+    });
+    setOpenFiles((prev) => prev.map((f) => (f.path === oldPath ? { ...f, path: cleanPath, name: cleanPath.split('/').pop() } : f)));
+    setActiveFilePath((current) => (current === oldPath ? cleanPath : current));
+    socket?.emit('file-rename', { roomId, oldPath, newPath: cleanPath });
+  }, [source, socket, roomId]);
+
+  const handleDeleteItem = useCallback((targetPath) => {
+    if (source === 'folder') {
+      notify('Deleting from your own folder is disabled on purpose — remove it in your OS', { type: 'warn' });
+      return;
+    }
+    const matches = dropPath(targetPath);
+    setFilesMap((prev) => Object.fromEntries(Object.entries(prev).filter(([path]) => !matches(path))));
+    setOpenFiles((prev) => prev.filter((f) => !matches(f.path)));
+    setActiveFilePath((current) => (matches(current) ? null : current));
+    socket?.emit('file-delete', { roomId, filePath: targetPath });
+  }, [source, socket, roomId]);
+
+  const handleCloseTab = useCallback((path) => {
+    setOpenFiles((prev) => {
+      const next = prev.filter((f) => f.path !== path);
+      setActiveFilePath((current) => {
+        if (current !== path) return current;
+        if (!next.length) return null;
+        const index = prev.findIndex((f) => f.path === path);
+        return next[Math.min(Math.max(index, 0), next.length - 1)].path;
+      });
+      return next;
+    });
+  }, []);
+
+  /* ----------------------------------------------------- folder picker */
+
+  const handleOpenLocalFolder = useCallback(async () => {
+    if (!window.showDirectoryPicker) {
+      notify('Folder access needs Chrome or Edge. Room files still work in any browser.', { type: 'warn', title: 'Not supported here' });
+      return;
+    }
     try {
       const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
-      const newHandles = {};
+      const handles = {};
+      const directoryHandles = {};
+      const files = {};
 
-      // Recursively read directory, store file handles
-      const readDirRecursive = async (handle, path = '') => {
-        const entries = [];
+      const walk = async (handle, prefix) => {
+        const nodes = [];
         for await (const [name, entry] of handle.entries()) {
-          // Skip hidden files, node_modules, build dirs
-          if (
-            name.startsWith('.') ||
-            name === 'node_modules' ||
-            name === 'dist' ||
-            name === 'build' ||
-            name === '.git'
-          ) continue;
-
-          const currentPath = path ? `${path}/${name}` : name;
-
+          if (name.startsWith('.') || ['node_modules', 'dist', 'build', '.git'].includes(name)) continue;
+          const path = prefix ? `${prefix}/${name}` : name;
           if (entry.kind === 'directory') {
-            const children = await readDirRecursive(entry, currentPath);
-            entries.push({ name, path: currentPath, isDirectory: true, children });
+            directoryHandles[path] = entry;
+            nodes.push({ name, path, isDirectory: true, children: await walk(entry, path) });
           } else {
-            // Store file handle for later content reading
-            newHandles[currentPath] = entry;
-            entries.push({
-              name,
-              path: currentPath,
-              isDirectory: false,
-              language: getLanguageFromPath(name)
-            });
+            handles[path] = entry;
+            const leaf = { name, path, isDirectory: false, language: getLanguageFromPath(name) };
+            files[path] = { name, path, language: leaf.language, content: undefined };
+            nodes.push(leaf);
           }
         }
-        // Sort: folders first, then files, both alphabetically
-        entries.sort((a, b) => {
-          if (a.isDirectory && !b.isDirectory) return -1;
-          if (!a.isDirectory && b.isDirectory) return 1;
-          return a.name.localeCompare(b.name);
-        });
-        return entries;
+        return nodes.sort((a, b) => (a.isDirectory === b.isDirectory ? a.name.localeCompare(b.name) : a.isDirectory ? -1 : 1));
       };
 
-      const tree = await readDirRecursive(dirHandle, dirHandle.name);
-      fileHandlesMap.current = newHandles;
+      const nodes = await walk(dirHandle, dirHandle.name);
+      fileHandles.current = handles;
+      dirHandles.current = { [dirHandle.name]: dirHandle, ...directoryHandles };
+      folderRoot.current = dirHandle.name;
 
-      // Clear state first
+      setLocalTree(nodes);
+      setFilesMap(files);
       setOpenFiles([]);
       setActiveFilePath(null);
-      setFilesMap({});
-      setFileTree(tree);
-      setIsLocalDiskSync(true);
+      setSource('folder');
 
-      // ── Auto-open first file (like VS Code) ──
-      // Priority: README > index.* > any first file found
-      const allPaths = Object.keys(newHandles);
-      const priority = ['readme.md', 'readme.txt', 'index.html', 'index.js', 'index.ts', 'index.jsx', 'index.tsx', 'main.js', 'main.ts', 'app.js', 'app.ts', 'app.jsx', 'app.tsx'];
-      
-      let firstFilePath = allPaths.find((p) =>
-        priority.includes(p.split('/').pop().toLowerCase())
-      ) || allPaths[0];
+      const paths = Object.keys(handles);
+      const first = paths.find((path) => /(^|\/)(index|main|app)\.(html|jsx|tsx|js|ts)$/i.test(path)) || paths[0];
+      if (first) {
+        const file = await handles[first].getFile();
+        openFile({ name: first.split('/').pop(), path: first, language: getLanguageFromPath(first), content: await file.text() });
+      }
+      notify(`${dirHandle.name} opened from your disk`, { type: 'success' });
+    } catch (error) {
+      if (error.name !== 'AbortError') notify(error.message || 'Could not open that folder', { type: 'error' });
+    }
+  }, [notify, openFile]);
 
-      if (firstFilePath && newHandles[firstFilePath]) {
+  const handleCloseFolder = useCallback(() => {
+    setSource('room');
+    setLocalTree([]);
+    fileHandles.current = {};
+    dirHandles.current = {};
+    folderRoot.current = '';
+    loadRoom(roomPassword);
+  }, [loadRoom, roomPassword]);
+
+  /* ------------------------------------------------------- snippet lib */
+
+  const requestSaveToLibrary = () => {
+    if (!currentFile) return notify('Open a file first', { type: 'error' });
+    if (!String(currentFile.content || '').trim()) return notify('That file is empty', { type: 'error' });
+    if (!identity?.id) return navigate('/signup');
+    setSnippetTitle(currentFile.name);
+    setSaveTarget(true);
+  };
+
+  const confirmSaveToLibrary = async () => {
+    try {
+      await api.post('/user/me/snippets', {
+        title: snippetTitle || currentFile.name,
+        code: currentFile.content,
+        language: currentFile.language || 'plaintext',
+        tags: [roomId]
+      });
+      notify(`Saved “${snippetTitle}” to your library`, { type: 'success', title: 'Snippet saved' });
+      pushFeed(`saved snippet: ${snippetTitle}`, 'event');
+      setSaveTarget(false);
+    } catch (error) {
+      notify(error.response?.data?.message || 'Could not save the snippet', { type: 'error' });
+    }
+  };
+
+  /* -------------------------------------------------------- AI actions */
+
+  const applyAiCode = useCallback((code, language) => {
+    if (!activeFilePath) {
+      notify('Open a file before applying generated code', { type: 'warn' });
+      return;
+    }
+    setFilesMap((prev) => ({
+      ...prev,
+      [activeFilePath]: { ...prev[activeFilePath], content: code, language: language || prev[activeFilePath]?.language }
+    }));
+    socket?.emit('code-change', { roomId, filePath: activeFilePath, content: code, language });
+    setIsDirty(true);
+    notify('Assistant output placed in the editor', { type: 'success' });
+  }, [activeFilePath, socket, roomId, notify]);
+
+  const createFileFromAi = useCallback(async (fileName, code, language) => {
+    const extensions = { javascript: 'js', typescript: 'ts', python: 'py', html: 'html', css: 'css', markdown: 'md', json: 'json' };
+    const path = fileName || `generated.${extensions[language] || 'txt'}`;
+    await handleCreateFile(path, code);
+  }, [handleCreateFile]);
+
+  /* ------------------------------------------------------------ chat */
+
+  const handleSendMessage = useCallback((text) => {
+    socket?.emit('send-message', { roomId, text });
+  }, [socket, roomId]);
+
+  const handleSendPrivateMessage = useCallback((recipientUsername, text) => {
+    socket?.emit('send-private-message', { roomId, recipientUsername, text });
+  }, [socket, roomId]);
+
+  /* ------------------------------------------------------- room link */
+
+  const roomLink = useMemo(() => {
+    const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
+    return `${window.location.origin}${basePath}/workspace/${roomId}`;
+  }, [roomId]);
+
+  const copyRoomLink = async () => {
+    try {
+      await navigator.clipboard.writeText(roomLink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      notify('Clipboard access was refused — copy the address bar instead', { type: 'warn' });
+    }
+  };
+
+  /* ------------------------------------------------- import / export */
+
+  // Room files arrive from someone else's machine, so every import is written
+  // through the same socket events a manual edit uses: peers see the files, the
+  // room log records them and they survive a reload.
+  const applyEntriesToRoom = useCallback((entries) => {
+    const opened = [];
+    entries.forEach((entry) => {
+      const language = getLanguageFromPath(entry.path);
+      const content = entry.content ?? '';
+      const file = { name: entry.path.split('/').pop(), path: entry.path, language, content };
+      const exists = Boolean(filesMap[entry.path]);
+
+      setFilesMap((prev) => ({ ...prev, [entry.path]: { ...(prev[entry.path] || {}), ...file } }));
+      if (exists) {
+        socket?.emit('code-change', { roomId, filePath: entry.path, content, language });
+      } else {
+        socket?.emit('file-create', { roomId, filePath: entry.path, content, language });
+      }
+      opened.push(file);
+    });
+
+    if (opened.length) {
+      const entryFile = opened.find((file) => /\.html$/i.test(file.path)) || opened[0];
+      setOpenFiles((prev) => (prev.some((file) => file.path === entryFile.path) ? prev : [...prev, entryFile]));
+      setActiveFilePath(entryFile.path);
+      setShowPreview(true);
+      pushFeed(`imported ${opened.length} file${opened.length === 1 ? '' : 's'} into the room`, 'event');
+    }
+  }, [filesMap, socket, roomId, pushFeed]);
+
+  const runImport = useCallback(async (pick, label) => {
+    if (source === 'folder') {
+      notify('Close your local folder first — the × in the file tree header — so the import lands in the room, not on your disk', {
+        type: 'warn',
+        title: 'You are editing your own folder'
+      });
+      return;
+    }
+
+    setIsImporting(true);
+    try {
+      const picked = await pick();
+      if (!picked) return;
+      const { entries, skipped } = await readFilesForRoom(picked);
+      if (!entries.length) {
+        notify(skipped.length ? `Nothing text-based in that ${label}` : `That ${label} was empty`, { type: 'warn' });
+        return;
+      }
+      applyEntriesToRoom(entries);
+      notify(
+        `${entries.length} file${entries.length === 1 ? '' : 's'} added from your ${label}${skipped.length ? ` · ${skipped.length} skipped` : ''}`,
+        { type: 'success', title: 'Imported into the room' }
+      );
+      if (skipped.length) {
+        notify(`Skipped: ${skipped.slice(0, 4).map((item) => item.path).join(', ')}${skipped.length > 4 ? '…' : ''}`, { type: 'info' });
+      }
+    } catch (error) {
+      notify(error.message || 'That import did not finish', { type: 'error' });
+    } finally {
+      setIsImporting(false);
+    }
+  }, [source, applyEntriesToRoom, notify]);
+
+  const handleImportFiles = useCallback(() => runImport(() => pickFiles(), 'selection'), [runImport]);
+  const handleImportFolder = useCallback(() => runImport(() => pickFiles({ directory: true }), 'folder'), [runImport]);
+
+  // Reading through the open folder handles means an import/export never sends
+  // file content anywhere — it comes from, and goes back to, the visitor.
+  const handleExportProject = useCallback(async () => {
+    const paths = Object.keys(filesMap);
+    if (!paths.length) {
+      notify('This room has no files to save yet', { type: 'warn' });
+      return;
+    }
+
+    const entries = [];
+    for (const path of paths) {
+      let content = filesMap[path]?.content;
+      if (content === undefined && fileHandles.current[path]) {
         try {
-          const fileHandle = newHandles[firstFilePath];
-          const file = await fileHandle.getFile();
-          const content = await file.text();
-          const fileName = firstFilePath.split('/').pop();
-          const fileData = {
-            name: fileName,
-            path: firstFilePath,
-            language: getLanguageFromPath(fileName),
-            content
-          };
-          setFilesMap({ [firstFilePath]: fileData });
-          setOpenFiles([fileData]);
-          setActiveFilePath(firstFilePath);
-        } catch (e) {
-          console.warn('Could not auto-open first file:', e);
+          const handle = await fileHandles.current[path].getFile();
+          content = await handle.text();
+        } catch {
+          content = undefined;
         }
       }
-    } catch (err) {
-      if (err.name !== 'AbortError') {
-        console.error('Error opening folder:', err);
+      if (typeof content === 'string') entries.push({ path, content });
+    }
+
+    if (!entries.length) {
+      notify('Open the files once, then save them to your device', { type: 'warn' });
+      return;
+    }
+
+    downloadProjectZip(roomMeta?.title || roomId, entries);
+    notify(`${entries.length} file${entries.length === 1 ? '' : 's'} saved as a .zip on your device`, {
+      type: 'success',
+      title: 'Saved to your device'
+    });
+    pushFeed(`exported ${entries.length} files to a local zip`, 'event');
+  }, [filesMap, roomId, roomMeta, notify, pushFeed]);
+
+  /* ------------------------------------------------------ agent edits */
+
+  // The agent proposes operations; this is the only place they touch state, so
+  // a bad path or a model hallucination cannot reach the room unchecked.
+  const applyProjectOps = useCallback((operations) => {
+    if (!Array.isArray(operations) || !operations.length) {
+      notify('The assistant proposed no file changes', { type: 'info' });
+      return 0;
+    }
+
+    let changed = 0;
+    operations.forEach((operation) => {
+      const path = String(operation.path || '').replace(/\\/g, '/').replace(/^\.?\//, '');
+      if (!path || path.includes('..') || path.startsWith('/')) return;
+
+      if (operation.type === 'delete') {
+        const matches = dropPath(path);
+        setFilesMap((prev) => Object.fromEntries(Object.entries(prev).filter(([candidate]) => !matches(candidate))));
+        setOpenFiles((prev) => prev.filter((file) => !matches(file.path)));
+        setActiveFilePath((current) => (matches(current) ? null : current));
+        socket?.emit('file-delete', { roomId, filePath: path });
+        changed += 1;
+        return;
       }
-    }
-  };
 
-  // Close Folder — reset everything back to clean state
-  const handleCloseFolder = () => {
-    setFileTree([]);
-    setFilesMap({});
-    setOpenFiles([]);
-    setActiveFilePath(null);
-    setIsLocalDiskSync(false);
-    setIsDirty(false);
-    fileHandlesMap.current = {};   // Clear all stored file handles
-  };
+      if (typeof operation.content !== 'string') return;
+      const language = getLanguageFromPath(path);
+      const file = { name: path.split('/').pop(), path, language, content: operation.content };
+      const exists = Boolean(filesMap[path]);
 
-  // Group Chat message send
-  const handleSendMessage = (text) => {
-    if (socket) {
-      socket.emit('send-message', { roomId, text, sender: user?.username });
-    }
-  };
-
-  // 1-on-1 Direct Private Message send
-  const handleSendPrivateMessage = (recipientUsername, text) => {
-    if (socket) {
-      socket.emit('send-private-message', {
-        roomId,
-        recipientUsername,
-        text,
-        sender: user?.username
-      });
-    }
-  };
-
-  // Copy Room Link with fallback support
-  const copyRoomLink = () => {
-    const basePath = window.location.pathname.startsWith('/pro-collab') ? '/pro-collab' : '';
-    const link = `${window.location.origin}${basePath}/workspace/${roomId}`;
-    try {
-      if (navigator.clipboard && window.isSecureContext) {
-        navigator.clipboard.writeText(link);
+      setFilesMap((prev) => ({ ...prev, [path]: { ...(prev[path] || {}), ...file } }));
+      setOpenFiles((prev) => (prev.some((item) => item.path === path) ? prev : [...prev, file]));
+      if (exists) {
+        socket?.emit('code-change', { roomId, filePath: path, content: operation.content, language });
       } else {
-        const textArea = document.createElement('textarea');
-        textArea.value = link;
-        textArea.style.position = 'fixed';
-        textArea.style.opacity = '0';
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textArea);
+        socket?.emit('file-create', { roomId, filePath: path, content: operation.content, language });
       }
-    } catch (err) {
-      console.warn('Clipboard write failed, fallback used');
+      changed += 1;
+    });
+
+    if (changed) {
+      const first = operations.find((operation) => operation.type !== 'delete');
+      if (first) setActiveFilePath(first.path.replace(/\\/g, '/').replace(/^\.?\//, ''));
+      setShowPreview(true);
+      setIsDirty(false);
+      notify(`${changed} file${changed === 1 ? '' : 's'} updated in the room`, { type: 'success', title: 'Assistant applied' });
+      pushFeed(`assistant changed ${changed} file${changed === 1 ? '' : 's'}`, 'event');
     }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+    return changed;
+  }, [filesMap, socket, roomId, notify, pushFeed]);
 
-  const handleStartCall = () => {
-    setIsVideoCallActive(true);
-    setActiveTab('video');
-    if (socket) socket.emit('join-call', { roomId });
-  };
+  /* -------------------------------------------------------- rendering */
 
-  const handleLeaveCall = () => {
-    setIsVideoCallActive(false);
-    setIsVideoMaximized(false);
-    setActiveTab('editor');
-    if (socket) socket.emit('leave-call', { roomId });
-  };
+  if (lockState === 'checking') {
+    return (
+      <div className="ws-boot">
+        <span className="ws-boot-spinner" />
+        <p>Opening {roomId}…</p>
+      </div>
+    );
+  }
 
-  const toggleLivePreview = () => {
-    setShowLivePreview((prev) => !prev);
-  };
-
-  const statusColors = {
-    connected: 'bg-emerald-400',
-    disconnected: 'bg-rose-400',
-    connecting: 'bg-amber-400',
-    error: 'bg-rose-400'
-  };
-
-  const isFullVideoMode = activeTab === 'video' || isVideoMaximized;
-  const isAdmin = user?.role === 'admin';
-
-  return (
-    <div className="h-[calc(100vh-64px)] mt-16 flex flex-col bg-[#0a0c10] overflow-hidden select-none">
-      
-      {/* Workspace Top Header Bar */}
-      <div className="bg-[#0d0f12]/95 backdrop-blur-2xl border-b border-white/[0.08] px-4 py-2 flex flex-wrap items-center justify-between gap-3 shrink-0 z-20">
-        
-        {/* Left Info & Sidebar Toggle */}
-        <div className="flex items-center gap-3 flex-1 min-w-0">
-          <button
-            onClick={() => setShowExplorer(!showExplorer)}
-            className={`p-2 rounded-xl border transition-all cursor-pointer ${
-              showExplorer
-                ? 'bg-indigo-600/20 border-indigo-500/40 text-indigo-300'
-                : 'bg-white/[0.04] border-white/10 text-slate-400 hover:text-white'
-            }`}
-            title="Toggle File Explorer Sidebar (Ctrl + B)"
-          >
-            {showExplorer ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeft className="w-4 h-4" />}
+  if (lockState === 'error') {
+    return (
+      <div className="ws-boot">
+        <div className="ws-lock">
+          <h1>That room could not be loaded</h1>
+          <p className="ws-lock-sub">The server did not respond. Check that it is running, then try again.</p>
+          <button type="button" className="ws-btn" onClick={() => { setLockState('checking'); loadRoom(roomPassword); }}>
+            Try again
           </button>
-
-          <div className="flex items-center gap-2">
-            <span className={`w-2.5 h-2.5 rounded-full ${statusColors[connectionStatus]} animate-pulse`} />
-            <span className="text-xs font-bold text-white truncate max-w-[180px]">Room: {roomId}</span>
-          </div>
-
-          <button
-            onClick={copyRoomLink}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-slate-300 hover:text-white text-xs font-semibold rounded-full transition-all duration-200 group cursor-pointer"
-            title="Copy Invite Link"
-          >
-            {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-slate-400 group-hover:text-white transition-colors" />}
-            <span className="hidden sm:inline">{copied ? 'Link Copied!' : 'Copy Link'}</span>
-          </button>
-        </div>
-
-        {/* Center: On-Demand Run Preview Button & Mode Switchers */}
-        <div className="flex items-center gap-1.5 bg-white/[0.04] p-1 rounded-full border border-white/[0.08] overflow-x-auto scrollbar-hide">
-          {/* Main On-Demand Run Preview Toggle Button */}
-          <button
-            onClick={toggleLivePreview}
-            className={`relative flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all duration-200 cursor-pointer ${
-              showLivePreview
-                ? 'bg-gradient-to-r from-rose-600 to-red-600 text-white shadow-md shadow-rose-600/30'
-                : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-md shadow-emerald-600/30 font-extrabold'
-            }`}
-            title={showLivePreview ? 'Close Live Web Preview' : 'Run & Preview Website in Real-Time'}
-          >
-            {showLivePreview ? (
-              <>
-                <Square className="w-3.5 h-3.5 fill-current" />
-                <span>Close Preview</span>
-              </>
-            ) : (
-              <>
-                <Play className="w-3.5 h-3.5 fill-current animate-pulse" />
-                <span>▶ Run Live Preview</span>
-              </>
-            )}
-          </button>
-
-          <div className="w-[1px] h-4 bg-white/10 mx-1" />
-
-          {/* Full Editor Only */}
-          <button
-            onClick={() => {
-              setActiveTab('editor');
-              setIsVideoMaximized(false);
-            }}
-            className={`relative flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 cursor-pointer ${
-              activeTab === 'editor' && !isFullVideoMode
-                ? 'bg-white text-slate-950 shadow-md font-bold'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Code2 className={`w-3.5 h-3.5 ${activeTab === 'editor' && !isFullVideoMode ? 'text-slate-950' : 'text-slate-400'}`} />
-            <span>Editor</span>
-          </button>
-
-          {/* Split Video Call */}
-          <button
-            onClick={() => {
-              setActiveTab('split');
-              setIsVideoCallActive(true);
-              setIsVideoMaximized(false);
-            }}
-            className={`relative flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 cursor-pointer ${
-              activeTab === 'split' && !isVideoMaximized
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 font-bold'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Video className={`w-3.5 h-3.5 ${activeTab === 'split' && !isVideoMaximized ? 'text-white' : 'text-indigo-400'}`} />
-            <span>Code + Video</span>
-          </button>
-
-          {/* Full HD Video Call */}
-          <button
-            onClick={() => {
-              setActiveTab('video');
-              setIsVideoCallActive(true);
-              setIsVideoMaximized(true);
-            }}
-            className={`relative flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 cursor-pointer ${
-              isFullVideoMode
-                ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30 font-bold'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Video className={`w-3.5 h-3.5 ${isFullVideoMode ? 'text-white' : 'text-purple-400'}`} />
-            <span>HD Video Call (Full)</span>
-          </button>
-        </div>
-
-        {/* Right Active Users & Actions */}
-        <div className="flex items-center gap-2.5">
-          <div className="flex items-center gap-2 bg-indigo-500/10 px-3 py-1.5 rounded-full border border-indigo-500/20">
-            <Users className="w-3.5 h-3.5 text-indigo-400" />
-            <span className="text-xs text-indigo-300 font-semibold">{activeUsers.length || 1} Connected</span>
-          </div>
-
-          <button
-            onClick={() => setShowSettings(!showSettings)}
-            className="p-2 rounded-full text-slate-400 hover:text-white hover:bg-white/10 border border-white/10 transition-all duration-200 cursor-pointer"
-            title="Settings"
-          >
-            <Settings className="w-4 h-4" />
-          </button>
+          <Link to="/" className="ws-lock-back">Back to home</Link>
         </div>
       </div>
+    );
+  }
 
-      {/* Main Workspace Layout with Left File Explorer Sidebar */}
-      <div className="flex-1 p-3 flex gap-3 overflow-hidden min-h-0 relative">
-        
-        {/* Left Collapsible File Explorer Sidebar (240px) */}
+  if (lockState === 'locked' || lockState === 'rejected') {
+    return (
+      <div className="ws-boot">
+        <form
+          className="ws-lock"
+          onSubmit={(event) => {
+            event.preventDefault();
+            setLockState('checking');
+            loadRoom(roomPassword);
+          }}
+        >
+          <span className="ws-lock-icon"><Lock size={19} /></span>
+          <h1>{roomMeta?.title ? roomMeta.title : 'This room is private'}</h1>
+          <p className="ws-lock-sub">Enter the password the host set when creating the room.</p>
+          {lockState === 'rejected' && <p className="ws-lock-bad">That password did not match.</p>}
+          <input
+            type="password"
+            value={roomPassword}
+            onChange={(event) => { setRoomPassword(event.target.value); if (lockState === 'rejected') setLockState('locked'); }}
+            placeholder="Room password"
+            autoFocus
+            aria-label="Room password"
+          />
+          <button type="submit">Unlock room</button>
+          <Link to="/" className="ws-lock-back">Back to home</Link>
+        </form>
+      </div>
+    );
+  }
+
+  const statusTone = { connected: 'is-ok', disconnected: 'is-bad', connecting: 'is-wait', error: 'is-bad' }[connectionStatus];
+  const otherPeople = activeUsers.filter((person) => person.socketId !== socket?.id);
+
+  return (
+    <div className={`ws-root ${theme === 'dark' ? 'dark-scope' : ''}`}>
+      <header className="ws-topbar">
+        <div className="ws-top-left">
+          <button
+            className={`ws-icon-btn ${showExplorer ? 'is-on' : ''}`}
+            onClick={() => setShowExplorer((value) => !value)}
+            title="Toggle file tree"
+            aria-label="Toggle file tree"
+          >
+            {showExplorer ? <PanelLeftClose size={16} /> : <PanelLeft size={16} />}
+          </button>
+
+          <div className="ws-room">
+            <span className={`ws-live ${statusTone}`} title={`Socket ${connectionStatus}`} />
+            <span className="ws-room-name" title={roomLink}>{roomMeta?.title || roomId}</span>
+            {roomMeta?.isPrivate && <span className="ws-room-tag"><Lock size={10} /> private</span>}
+            {guestMode && <span className="ws-room-tag is-guest"><ShieldAlert size={10} /> guest</span>}
+          </div>
+
+          <button className="ws-chip" onClick={copyRoomLink} title="Copy invite link">
+            {copied ? <Check size={13} /> : <Link2 size={13} />}
+            {copied ? 'Copied' : 'Invite'}
+          </button>
+        </div>
+
+        <div className="ws-segmented">
+          <button
+            className={!showPreview && !showVideo ? 'is-on' : ''}
+            onClick={() => { setShowPreview(false); setShowVideo(false); setVideoMaximized(false); }}
+          >
+            <Code2 size={13} /> Editor
+          </button>
+          <button
+            className={showPreview ? 'is-on' : ''}
+            onClick={() => { setShowPreview((value) => !value); setVideoMaximized(false); }}
+          >
+            {showPreview ? <Square size={13} /> : <Play size={13} />} Preview
+          </button>
+          <button
+            className={showVideo ? 'is-on' : ''}
+            onClick={() => { setShowVideo((value) => !value); setVideoMaximized(false); }}
+          >
+            <Video size={13} /> Call
+          </button>
+        </div>
+
+        <div className="ws-top-right">
+          <div className="ws-chip is-static" title={otherPeople.length ? otherPeople.map((p) => p.username).join(', ') : 'You are alone here'}>
+            <Users size={13} />
+            {activeUsers.length || 1}
+          </div>
+          <button className="ws-chip" onClick={requestSaveToLibrary} disabled={!currentFile}>
+            <Sparkles size={13} /> Snippet
+          </button>
+          {isAdmin && (
+            <button className={`ws-chip ${rightPanel === 'activity' ? 'is-on' : ''}`} onClick={() => setRightPanel('activity')}>
+              <Activity size={13} /> Log
+            </button>
+          )}
+        </div>
+      </header>
+
+      <div className="ws-body">
         {showExplorer && (
-          <div className="w-60 shrink-0 hidden md:flex flex-col h-full animate-fade-in overflow-hidden">
+          <aside className="ws-side">
             <FileExplorer
-              fileTree={fileTree}
+              fileTree={tree}
               activeFilePath={activeFilePath}
               onSelectFile={handleSelectFile}
               onCreateFile={handleCreateFile}
               onCreateFolder={handleCreateFolder}
               onRenameItem={handleRenameItem}
               onDeleteItem={handleDeleteItem}
-              onRefreshTree={fetchLocalWorkspaceTree}
-              onSyncLocalWorkspace={fetchLocalWorkspaceTree}
-              onOpenLocalFolder={handleOpenCustomLocalFolder}
+              onOpenLocalFolder={handleOpenLocalFolder}
               onCloseFolder={handleCloseFolder}
-              isLocalDiskSync={isLocalDiskSync}
-              isLoading={isTreeLoading}
+              onImportFiles={handleImportFiles}
+              onImportFolder={handleImportFolder}
+              onExportProject={handleExportProject}
+              onRefreshTree={() => (source === 'room' ? loadRoom(roomPassword) : handleOpenLocalFolder())}
+              isLocalDiskSync={source === 'folder'}
+              isImporting={isImporting}
+              peers={peers}
             />
-          </div>
+          </aside>
         )}
 
-        {/* Dynamic Center Work Area */}
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-3 h-full overflow-hidden min-h-0">
-          
-          {/* Full Screen HD Video Mode (Spans entire 12 columns) */}
-          {isFullVideoMode ? (
-            <div className="lg:col-span-12 h-full min-h-0 animate-fade-in overflow-hidden">
-              <VideoCallContainer
-                socket={socket}
-                roomId={roomId}
-                currentUser={user}
-                onLeaveCall={handleLeaveCall}
-                isMaximized={true}
-                onToggleMaximize={() => {
-                  setIsVideoMaximized(false);
-                  setActiveTab('split');
-                }}
-              />
-            </div>
+        <main className="ws-main">
+          {videoMaximized ? (
+            <VideoCallContainer
+              socket={socket}
+              roomId={roomId}
+              username={identity?.username}
+              activeUsers={activeUsers}
+              theme={theme}
+              isMaximized
+              onToggleMaximize={() => setVideoMaximized(false)}
+              onClose={() => { setShowVideo(false); setVideoMaximized(false); }}
+            />
           ) : (
-            /* Split / Standard Editor Mode */
-            <>
-              <div className={`${showLivePreview || activeTab === 'split' ? 'lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-3' : 'lg:col-span-8 flex flex-col'} h-full min-h-0 overflow-hidden`}>
-                
-                {/* Left Box: Monaco Editor or Empty State */}
-                <div className="h-full flex flex-col min-h-0 overflow-hidden">
-                  {currentFile ? (
-                    <SharedEditor
-                      code={currentFile.content || ''}
-                      language={currentFile.language || 'javascript'}
-                      onCodeChange={handleCodeChange}
-                      onLanguageChange={handleLanguageChange}
-                      openFiles={openFiles}
-                      activeFilePath={activeFilePath}
-                      onSelectTab={handleSelectTab}
-                      onCloseTab={handleCloseTab}
-                      onSaveActiveFile={handleSaveActiveFile}
-                      onTogglePreview={toggleLivePreview}
-                      showLivePreview={showLivePreview}
-                      isDirty={isDirty}
-                      isSaving={isSaving}
-                      isLocalDiskSync={isLocalDiskSync}
-                    />
-                  ) : (
-                    /* ── Empty State: No file open ── */
-                    <div className="h-full flex flex-col items-center justify-center bg-[#0d1117] rounded-2xl border border-white/[0.07] select-none">
-                      <div className="flex flex-col items-center gap-5 text-center px-8 max-w-sm">
-                        <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
-                          <FolderTree className="w-7 h-7 text-indigo-400" />
-                        </div>
-                        <div>
-                          <h3 className="text-white font-bold text-lg mb-2">No File Open</h3>
-                          <p className="text-slate-400 text-sm leading-relaxed">
-                            Open your project folder from the sidebar to start coding. All your files will appear here.
-                          </p>
-                        </div>
-                        <button
-                          onClick={handleOpenCustomLocalFolder}
-                          className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold rounded-xl transition-all duration-200 shadow-lg shadow-indigo-600/30 cursor-pointer"
-                        >
-                          <FolderTree className="w-4 h-4" />
-                          Open Folder
-                        </button>
-                        <p className="text-slate-600 text-xs">or click a file in the sidebar to open it</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Right Box: Live Web Preview */}
-                {showLivePreview && currentFile && (
-                  <div className="h-full flex flex-col min-h-0 overflow-hidden">
-                    <LivePreviewPanel
-                      activeFileContent={currentFile.content || ''}
-                      activeFilePath={activeFilePath}
-                      filesMap={filesMap}
-                      onClose={() => setShowLivePreview(false)}
-                    />
-                  </div>
-                )}
-
-                {/* Right Box in Split Video Mode */}
-                {!showLivePreview && activeTab === 'split' && (
-                  <div className="h-full flex flex-col min-h-0 overflow-hidden">
-                    <VideoCallContainer
-                      socket={socket}
-                      roomId={roomId}
-                      currentUser={user}
-                      onLeaveCall={handleLeaveCall}
-                      isMaximized={false}
-                      onToggleMaximize={() => setIsVideoMaximized(true)}
-                    />
-                  </div>
-                )}
-
-              </div>
-
-              {/* Right Panels: Chat (with 1-on-1 DM & Group) & Activity Log (Admin Only) */}
-              <div className="lg:col-span-4 flex flex-col gap-3 h-full min-h-0 overflow-hidden">
-                
-                {/* Chat Panel: Takes full 100% height for regular users, top half for admin */}
-                <div className={`${isAdmin ? 'h-1/2' : 'h-full'} min-h-0 flex flex-col`}>
-                  <ChatPanel
-                    messages={messages}
-                    privateMessages={privateMessages}
-                    onSendMessage={handleSendMessage}
-                    onSendPrivateMessage={handleSendPrivateMessage}
-                    currentUser={user}
-                    activeUsers={activeUsers}
+            <div className={`ws-grid${showPreview ? ' has-preview' : ''}${showVideo ? ' has-video' : ''}`}>
+              <section className="ws-cell">
+                {openFiles.length ? (
+                  <SharedEditor
+                    code={currentFile?.content ?? ''}
+                    language={currentFile?.language || 'plaintext'}
+                    onCodeChange={handleCodeChange}
+                    onLanguageChange={handleLanguageChange}
+                    openFiles={openFiles}
+                    activeFilePath={activeFilePath}
+                    onSelectTab={handleSelectFile}
+                    onCloseTab={handleCloseTab}
+                    onSaveActiveFile={handleSaveActiveFile}
+                    onTogglePreview={() => setShowPreview((value) => !value)}
+                    showLivePreview={showPreview}
+                    isDirty={isDirty}
+                    isSaving={isSaving}
+                    isLocalDiskSync={source === 'folder'}
+                    theme={theme === 'dark' ? 'pc-dark' : 'vs'}
+                    socket={socket}
+                    roomId={roomId}
+                    username={identity?.username}
+                    onPresenceChange={setPeers}
                   />
-                </div>
-
-                {/* Admin Only: Live Activity Log */}
-                {isAdmin && (
-                  <div className="h-1/2 min-h-0 flex flex-col animate-fade-in">
-                    <ActivityLogPanel logs={logs} />
+                ) : (
+                  <div className="ws-empty">
+                    <FolderTree size={28} />
+                    <h2>Nothing open yet</h2>
+                    <p>
+                      {source === 'folder'
+                        ? 'Pick a file on the left to edit it, or create a new one.'
+                        : 'Create a file to start, or open a folder from your own machine.'}
+                    </p>
+                    <div className="ws-empty-actions">
+                      <button className="ws-btn" onClick={() => handleCreateFile('index.html', STARTER_HTML)}>
+                        Start an HTML file
+                      </button>
+                      <button className="ws-btn is-ghost" onClick={handleOpenLocalFolder}>
+                        Open my folder
+                      </button>
+                    </div>
                   </div>
                 )}
+              </section>
 
-              </div>
-            </>
+              {showPreview && (
+                <section className="ws-cell">
+                  <LivePreviewPanel
+                    activeFileContent={currentFile?.content ?? ''}
+                    activeFilePath={activeFilePath}
+                    filesMap={filesMap}
+                    onClose={() => setShowPreview(false)}
+                  />
+                </section>
+              )}
+
+              {showVideo && (
+                <section className="ws-cell">
+                  <VideoCallContainer
+                    socket={socket}
+                    roomId={roomId}
+                    username={identity?.username}
+                    activeUsers={activeUsers}
+                    theme={theme}
+                    isMaximized={false}
+                    onToggleMaximize={() => setVideoMaximized(true)}
+                    onClose={() => setShowVideo(false)}
+                  />
+                </section>
+              )}
+            </div>
           )}
+        </main>
 
-        </div>
+        <aside className="ws-rail">
+          <div className="ws-rail-tabs">
+            <button className={rightPanel === 'chat' ? 'is-on' : ''} onClick={() => setRightPanel('chat')}>
+              <MessageSquare size={13} /> Chat
+            </button>
+            <button className={rightPanel === 'ai' ? 'is-on' : ''} onClick={() => setRightPanel('ai')}>
+              <Sparkles size={13} /> Assistant
+            </button>
+            {isAdmin && (
+              <button className={rightPanel === 'activity' ? 'is-on' : ''} onClick={() => setRightPanel('activity')}>
+                <Activity size={13} /> Log
+              </button>
+            )}
+          </div>
 
+          <div className="ws-rail-body">
+            {rightPanel === 'chat' && (
+              <ChatPanel
+                messages={messages}
+                privateMessages={privateMessages}
+                onSendMessage={handleSendMessage}
+                onSendPrivateMessage={handleSendPrivateMessage}
+                currentUser={identity}
+                activeUsers={activeUsers}
+              />
+            )}
+            {rightPanel === 'ai' && (
+              <AiAssistantPanel
+                activeCode={currentFile?.content ?? ''}
+                activeFilePath={activeFilePath}
+                language={currentFile?.language || 'plaintext'}
+                filesMap={filesMap}
+                onApplyCodeToEditor={applyAiCode}
+                onCreateFileFromAi={createFileFromAi}
+                onApplyProjectOps={applyProjectOps}
+                username={identity?.username}
+              />
+            )}
+            {rightPanel === 'activity' && <ActivityLogPanel logs={logs} />}
+          </div>
+        </aside>
       </div>
 
+      {saveTarget && (
+        <div className="ws-modal-backdrop" role="dialog" aria-modal="true" aria-label="Save snippet" onClick={() => setSaveTarget(false)}>
+          <form
+            className="ws-modal"
+            onClick={(event) => event.stopPropagation()}
+            onSubmit={(event) => { event.preventDefault(); confirmSaveToLibrary(); }}
+          >
+            <div className="ws-modal-head">
+              <h2>Save to your library</h2>
+              <button type="button" className="ws-icon-btn" onClick={() => setSaveTarget(false)} aria-label="Close"><X size={15} /></button>
+            </div>
+            <label className="ws-field">
+              <span>Title</span>
+              <input value={snippetTitle} onChange={(event) => setSnippetTitle(event.target.value)} autoFocus />
+            </label>
+            <p className="ws-modal-note">
+              {currentFile?.name} · {(currentFile?.content || '').length.toLocaleString()} characters · {currentFile?.language}
+            </p>
+            <button type="submit" className="ws-btn is-wide">Save snippet</button>
+          </form>
+        </div>
+      )}
+
+      {isDirty && (
+        <button className="ws-dirty" onClick={handleSaveActiveFile} title="Save (Ctrl+S)">
+          <HardDrive size={12} /> {isSaving ? 'saving…' : 'unsaved'}
+        </button>
+      )}
     </div>
   );
 };
+
+const dropPath = (path) => (candidate) => Boolean(candidate) && (candidate === path || candidate.startsWith(`${path}/`));
 
 export default WorkspacePage;

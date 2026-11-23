@@ -1,35 +1,46 @@
 import React from 'react';
-import { X, FileCode, FileText, File, Save, CheckCircle2, HardDrive, RefreshCw, Play, Square } from 'lucide-react';
+import { X, FileCode, FileText, File, Save, HardDrive, Play, Square, RefreshCw } from 'lucide-react';
+import { PRESENCE_COLORS, colorIndexFor } from '../lib/presence';
+import '../styles/editor.css';
 
-export const getFileIcon = (filename = '') => {
-  const ext = filename.split('.').pop()?.toLowerCase();
-  switch (ext) {
-    case 'js':
-    case 'jsx':
-      return <FileCode className="w-3.5 h-3.5 text-amber-400 shrink-0" />;
-    case 'ts':
-    case 'tsx':
-      return <FileCode className="w-3.5 h-3.5 text-blue-400 shrink-0" />;
-    case 'py':
-      return <FileCode className="w-3.5 h-3.5 text-emerald-400 shrink-0" />;
-    case 'html':
-      return <FileCode className="w-3.5 h-3.5 text-orange-400 shrink-0" />;
-    case 'css':
-      return <FileCode className="w-3.5 h-3.5 text-cyan-400 shrink-0" />;
-    case 'json':
-      return <FileCode className="w-3.5 h-3.5 text-amber-300 shrink-0" />;
-    case 'md':
-      return <FileText className="w-3.5 h-3.5 text-purple-400 shrink-0" />;
-    case 'cpp':
-    case 'c':
-    case 'h':
-      return <FileCode className="w-3.5 h-3.5 text-indigo-400 shrink-0" />;
-    case 'rs':
-      return <FileCode className="w-3.5 h-3.5 text-orange-300 shrink-0" />;
-    default:
-      return <File className="w-3.5 h-3.5 text-slate-400 shrink-0" />;
-  }
+// Monochrome UI: every glyph uses the muted ink token, so the tree stays calm.
+const ICON_BY_EXT = {
+  js: ['FileCode', 'var(--ink-faint)'],
+  mjs: ['FileCode', 'var(--ink-faint)'],
+  cjs: ['FileCode', 'var(--ink-faint)'],
+  jsx: ['FileCode', 'var(--ink-faint)'],
+  ts: ['FileCode', 'var(--ink-faint)'],
+  tsx: ['FileCode', 'var(--ink-faint)'],
+  py: ['FileCode', 'var(--ink-faint)'],
+  html: ['FileCode', 'var(--ink-faint)'],
+  htm: ['FileCode', 'var(--ink-faint)'],
+  css: ['FileCode', 'var(--ink-faint)'],
+  scss: ['FileCode', 'var(--ink-faint)'],
+  json: ['FileCode', 'var(--ink-faint)'],
+  md: ['FileText', 'var(--ink-faint)'],
+  markdown: ['FileText', 'var(--ink-faint)'],
+  c: ['FileCode', 'var(--ink-faint)'],
+  h: ['FileCode', 'var(--ink-faint)'],
+  cpp: ['FileCode', 'var(--ink-faint)'],
+  rs: ['FileCode', 'var(--ink-faint)'],
+  go: ['FileCode', 'var(--ink-faint)'],
+  sh: ['FileCode', 'var(--ink-faint)'],
+  sql: ['FileCode', 'var(--ink-faint)'],
+  yml: ['FileCode', 'var(--ink-faint)'],
+  yaml: ['FileCode', 'var(--ink-faint)']
 };
+
+const ICONS = { FileCode, FileText, File };
+
+export const FileGlyph = ({ name = '' }) => {
+  const ext = name.split('.').pop()?.toLowerCase() || '';
+  const [icon, tint] = ICON_BY_EXT[ext] || ['File', 'var(--ink-faint)'];
+  const Icon = ICONS[icon] || File;
+  return <Icon size={13} style={{ color: tint, flexShrink: 0 }} />;
+};
+
+// Kept for FileExplorer, which imports this helper.
+export const getFileIcon = (name = '') => <FileGlyph name={name} />;
 
 const EditorTabBar = ({
   openFiles = [],
@@ -41,110 +52,95 @@ const EditorTabBar = ({
   showLivePreview = false,
   isDirty = false,
   isSaving = false,
-  isLocalDiskSync = false
+  isLocalDiskSync = false,
+  peers = []
 }) => {
-  if (openFiles.length === 0) return null;
+  if (!openFiles.length) return null;
 
   return (
-    <div className="bg-[#0f131a] border-b border-white/[0.08] flex items-center justify-between px-2 overflow-x-auto select-none scrollbar-hide">
-      {/* File Tabs List */}
-      <div className="flex items-center gap-1 overflow-x-auto py-1 scrollbar-hide">
+    <div className="et-bar">
+      <div className="et-tabs" role="tablist" aria-label="Open files">
         {openFiles.map((file) => {
+          const name = file.name || file.path.split('/').pop();
           const isActive = file.path === activeFilePath;
-          const fileName = file.name || file.path.split('/').pop();
+          const onFile = peers.filter((peer) => peer.filePath === file.path);
+          const firstPeer = onFile[0];
 
           return (
-            <div
+            <button
               key={file.path}
-              onClick={() => onSelectTab(file.path)}
-              className={`group flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all duration-150 relative ${
-                isActive
-                  ? 'bg-white/[0.08] text-white border border-white/[0.12] shadow-sm font-semibold'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]'
-              }`}
-              title={file.path}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => onSelectTab?.(file)}
+              title={onFile.length ? `${name} — ${onFile.map((p) => p.username).join(', ')} here` : file.path}
+              className={`et-tab ${isActive ? 'is-active' : ''}${onFile.length && !isActive ? ' is-remote' : ''}`}
+              style={firstPeer ? { '--et-peer': PRESENCE_COLORS[colorIndexFor(firstPeer.socketId)].hex } : undefined}
             >
-              {/* File Extension Icon */}
-              {getFileIcon(fileName)}
+              <FileGlyph name={name} />
+              <span className="et-tab-name">{name}</span>
 
-              {/* File Name */}
-              <span className="truncate max-w-[140px]">{fileName}</span>
-
-              {/* Dirty indicator */}
-              {isActive && isDirty && (
-                <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse shrink-0" title="Unsaved changes (Ctrl+S to save)" />
+              {onFile.length > 0 && (
+                <span className="et-tab-peers">
+                  {onFile.slice(0, 3).map((peer) => (
+                    <i
+                      key={peer.socketId}
+                      className="et-peer-tick"
+                      style={{ background: PRESENCE_COLORS[colorIndexFor(peer.socketId)].hex }}
+                    />
+                  ))}
+                </span>
               )}
 
-              {/* Close Tab Button */}
+              {isActive && isDirty && <span className="et-peer-tick" style={{ background: 'var(--warn)' }} />}
+
               {openFiles.length > 1 && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onCloseTab(file.path);
+                <span
+                  role="button"
+                  tabIndex={-1}
+                  aria-label={`Close ${name}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onCloseTab?.(file.path);
                   }}
-                  className="p-0.5 rounded hover:bg-white/10 text-slate-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity ml-0.5"
-                  title="Close Tab"
+                  className="et-close"
                 >
-                  <X className="w-3 h-3" />
-                </button>
+                  <X size={11} />
+                </span>
               )}
-            </div>
+            </button>
           );
         })}
       </div>
 
-      {/* Right Controls: Run Preview, Save Button & Disk Sync Badge */}
-      <div className="flex items-center gap-2 pl-3 py-1 shrink-0">
-        {/* On-Demand Run Preview Button */}
+      <div className="et-actions">
+        {isLocalDiskSync && (
+          <span className="et-disk" title="Editing files straight from your own folder">
+            <HardDrive size={11} /> ON DISK
+          </span>
+        )}
+
         {onTogglePreview && (
           <button
             type="button"
             onClick={onTogglePreview}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
-              showLivePreview
-                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30'
-                : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm shadow-emerald-600/30'
-            }`}
-            title={showLivePreview ? 'Close Live Web Preview' : 'Run & Open Live Web Preview (Side-by-Side)'}
+            className={`et-btn ${showLivePreview ? 'is-stop' : 'is-run'}`}
+            title={showLivePreview ? 'Hide the live preview' : 'Render the project side by side'}
           >
-            {showLivePreview ? (
-              <>
-                <Square className="w-3 h-3 fill-current" />
-                <span>Close Preview</span>
-              </>
-            ) : (
-              <>
-                <Play className="w-3 h-3 fill-current" />
-                <span>Run Preview</span>
-              </>
-            )}
+            {showLivePreview ? <Square size={12} /> : <Play size={12} />}
+            {showLivePreview ? 'Stop' : 'Run'}
           </button>
         )}
 
-        {isLocalDiskSync && (
-          <span className="hidden md:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-semibold">
-            <HardDrive className="w-3 h-3 text-emerald-400" />
-            <span>VS Code Sync</span>
-          </span>
-        )}
-
         <button
+          type="button"
           onClick={onSaveActiveFile}
           disabled={isSaving}
-          className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer ${
-            isDirty
-              ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm shadow-indigo-600/30'
-              : 'bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 border border-white/10'
-          }`}
-          title="Save File to Disk (Ctrl + S)"
+          className={`et-btn ${isDirty ? 'is-dirty' : ''}`}
+          title="Save (Ctrl+S)"
         >
-          {isSaving ? (
-            <RefreshCw className="w-3 h-3 animate-spin text-white" />
-          ) : (
-            <Save className="w-3 h-3" />
-          )}
-          <span>{isSaving ? 'Saving...' : isDirty ? 'Save (Ctrl+S)' : 'Saved'}</span>
+          {isSaving ? <RefreshCw size={12} className="animate-spin" /> : <Save size={12} />}
+          {isSaving ? 'Saving' : isDirty ? 'Save' : 'Saved'}
         </button>
       </div>
     </div>

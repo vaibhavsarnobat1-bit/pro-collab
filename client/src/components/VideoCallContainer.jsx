@@ -1,428 +1,412 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Video, Mic, MicOff, VideoOff, MonitorUp, PhoneOff, Users, Maximize2,
-  Minimize2, Volume2, Radio, Expand, Shrink
+  Mic, MicOff, Video as VideoIcon, VideoOff, MonitorUp, PhoneOff, PhoneCall,
+  Maximize2, Minimize2, Users, Volume2, AlertTriangle
 } from 'lucide-react';
+import { useWebRTC } from '../lib/useWebRTC';
+import '../styles/videocall.css';
+
+/* Assigns a live MediaStream to a <video>. React cannot set srcObject as an
+ * attribute, so the stream is attached through the ref and the element is asked
+ * to replay whenever a track is added or removed (the mesh reuses one stream
+ * object and calls addTrack as media arrives). */
+function StreamVideo({ stream, muted = false, mirrored = false }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    if (!stream) { el.srcObject = null; return undefined; }
+    const attach = () => {
+      if (el.srcObject !== stream) el.srcObject = stream;
+      const play = el.play();
+      if (play && play.catch) play.catch(() => {});
+    };
+    attach();
+    stream.addEventListener('addtrack', attach);
+    stream.addEventListener('removetrack', attach);
+    return () => {
+      stream.removeEventListener('addtrack', attach);
+      stream.removeEventListener('removetrack', attach);
+    };
+  }, [stream]);
+  return <video ref={ref} autoPlay playsInline muted={muted} className={`vc-video${mirrored ? ' vc-mirror' : ''}`} />;
+}
+
+/* Real active-speaker detection: an AnalyserNode per remote audio track. When
+ * the browser has no Web Audio API the hook reports canMeasure=false so the UI
+ * omits the indicator instead of inventing it from the mic toggle. */
+function useActiveSpeaker(peers) {
+  const [activeIds, setActiveIds] = useState([]);
+  const [canMeasure, setCanMeasure] = useState(false);
+  const ctxRef = useRef(null);
+  const nodesRef = useRef(new Map());
+  const signature = useMemo(
+    () => peers.map((p) => `${p.socketId}:${p.stream ? p.stream.getAudioTracks().map((t) => t.id).join('.') : ''}`).join('|'),
+    [peers]
+  );
+
+  useEffect(() => {
+    const AudioCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtor) { setCanMeasure(false); return undefined; }
+    if (!ctxRef.current) {
+      try { ctxRef.current = new AudioCtor(); } catch { setCanMeasure(false); return undefined; }
+    }
+    const ctx = ctxRef.current;
+    setCanMeasure(true);
+    const nodes = nodesRef.current;
+    const live = new Set();
+    for (const peer of peers) {
+      const track = peer.stream && peer.stream.getAudioTracks()[0];
+      if (!track) continue;
+      live.add(peer.socketId);
+      const key = `${peer.socketId}:${track.id}`;
+      const existing = nodes.get(peer.socketId);
+      if (existing && existing.key === key) continue;
+      if (existing) { try { existing.source.disconnect(); } catch { /* noop */ } }
+      const source = ctx.createMediaStreamSource(new MediaStream([track]));
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.7;
+      source.connect(analyser);
+      nodes.set(peer.socketId, { key, source, analyser, buf: new Uint8Array(analyser.fftSize) });
+    }
+    for (const [id, entry] of nodes) {
+      if (!live.has(id)) { try { entry.source.disconnect(); } catch { /* noop */ } nodes.delete(id); }
+    }
+  }, [signature, peers]);
+
+  useEffect(() => {
+    if (!canMeasure) return undefined;
+    let frame;
+    const sample = () => {
+      if (ctxRef.current && ctxRef.current.state === 'suspended') ctxRef.current.resume().catch(() => {});
+      const talking = [];
+      nodesRef.current.forEach((entry, id) => {
+        entry.analyser.getByteTimeDomainData(entry.buf);
+        let sum = 0;
+        for (let i = 0; i < entry.buf.length; i += 1) { const v = (entry.buf[i] - 128) / 128; sum += v * v; }
+        if (Math.sqrt(sum / entry.buf.length) > 0.06) talking.push(id);
+      });
+      setActiveIds((prev) => (
+        prev.length === talking.length && prev.every((x, i) => x === talking[i]) ? prev : talking
+      ));
+      frame = requestAnimationFrame(sample);
+    };
+    frame = requestAnimationFrame(sample);
+    return () => cancelAnimationFrame(frame);
+  }, [canMeasure]);
+
+  useEffect(() => () => {
+    nodesRef.current.forEach((entry) => { try { entry.source.disconnect(); } catch { /* noop */ } });
+    nodesRef.current.clear();
+    if (ctxRef.current) { try { ctxRef.current.close(); } catch { /* noop */ } ctxRef.current = null; }
+  }, []);
+
+  return { activeIds, canMeasure };
+}
+
+function peerStatus(peer) {
+  const { connectionState, iceState } = peer;
+  if (connectionState === 'failed' || iceState === 'failed') return { label: 'Failed', tone: 'bad' };
+  if (connectionState === 'disconnected' || connectionState === 'closed' || iceState === 'disconnected') return { label: 'Disconnected', tone: 'bad' };
+  if (connectionState === 'connected' || iceState === 'connected' || iceState === 'completed') return { label: 'Connected', tone: 'ok' };
+  return { label: 'Connecting', tone: 'wait' };
+}
+
+const isConnected = (peer) => (
+  peer.connectionState === 'connected' || peer.iceState === 'connected' || peer.iceState === 'completed'
+);
+const initial = (name) => (name || '?').trim().charAt(0).toUpperCase() || '?';
+
+function TileOverlay({ name, isSelf, isSharing, micOn, cameraOn, status, speaking, showSpeaker }) {
+  return (
+    <>
+      {status && (
+        <div className={`vc-status vc-status--${status.tone}`}>
+          <i />{status.label}
+        </div>
+      )}
+      {showSpeaker && speaking && (
+        <div className="vc-speaker"><Volume2 />Speaking</div>
+      )}
+      {!cameraOn && (
+        <div className="vc-off">
+          <div className="vc-avatar">{initial(name)}</div>
+          <div className="vc-off-label">{isSelf ? 'Your camera is off' : `${name}'s camera is off`}</div>
+        </div>
+      )}
+      <div className="vc-namebar">
+        <span className="trunc">{name}{isSelf ? ' (you)' : ''}</span>
+        {!micOn && <MicOff size={12} />}
+        {isSharing && <span className="vc-tag vc-tag--screen">Screen</span>}
+      </div>
+    </>
+  );
+}
+
+function RemoteTile({ peer, speaking, showSpeaker }) {
+  const status = peerStatus(peer);
+  return (
+    <div className={`vc-tile${speaking ? ' vc-speaking' : ''}`}>
+      <StreamVideo stream={peer.stream} />
+      <TileOverlay name={peer.username} isSelf={false} isSharing={false} micOn={peer.micOn}
+        cameraOn={peer.cameraOn} status={status} speaking={speaking} showSpeaker={showSpeaker} />
+    </div>
+  );
+}
+
+function LocalTile({ stream, username, micOn, cameraOn, isSharing }) {
+  return (
+    <div className="vc-tile vc-self">
+      <StreamVideo stream={stream} muted mirrored />
+      <TileOverlay name={username || 'You'} isSelf isSharing={isSharing} micOn={micOn}
+        cameraOn={cameraOn} status={null} speaking={false} showSpeaker={false} />
+    </div>
+  );
+}
 
 const VideoCallContainer = ({
-  socket,
-  roomId,
-  currentUser,
-  onLeaveCall,
-  isMaximized = false,
-  onToggleMaximize
+  socket, roomId, username, activeUsers = [], theme = 'dark',
+  isMaximized = false, onToggleMaximize, onClose, floating = false
 }) => {
-  const [micOn, setMicOn] = useState(true);
-  const [videoOn, setVideoOn] = useState(true);
-  const [isScreenSharing, setIsScreenSharing] = useState(false);
-  const [callPeers, setCallPeers] = useState([]);
-  const [activePresenter, setActivePresenter] = useState(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const {
+    peers, localStream, screenStream, mediaError, micOn, cameraOn, isSharing, isRequestingShare, clearError,
+    start, stop, toggleMic, toggleCamera, toggleScreenShare
+  } = useWebRTC({ socket, roomId });
 
-  const containerRef = useRef(null);
-  const localVideoRef = useRef(null);
-  const localStreamRef = useRef(null);
-  const screenStreamRef = useRef(null);
+  const [isJoining, setIsJoining] = useState(false);
+  const [joinError, setJoinError] = useState(null);
+  const hasJoined = !!localStream;
+  const { activeIds, canMeasure } = useActiveSpeaker(peers);
+  const speakingSet = useMemo(() => new Set(activeIds), [activeIds]);
 
-  // Initialize Local User Media (Video/Audio stream)
-  useEffect(() => {
-    let mounted = true;
+  const canShareScreen = typeof navigator !== 'undefined'
+    && !!navigator.mediaDevices && typeof navigator.mediaDevices.getDisplayMedia === 'function';
 
-    const startLocalStream = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 1280 }, height: { ideal: 720 } },
-          audio: true
-        });
-        if (mounted) {
-          localStreamRef.current = stream;
-          if (localVideoRef.current) {
-            localVideoRef.current.srcObject = stream;
-          }
-        }
-      } catch (err) {
-        console.warn('Could not access camera/microphone directly:', err);
-        createDemoStreamCanvas();
-      }
-    };
+  const connectedCount = useMemo(() => peers.filter(isConnected).length, [peers]);
+  const failedCount = useMemo(
+    () => peers.filter((p) => p.connectionState === 'failed' || p.iceState === 'failed').length, [peers]
+  );
+  const everyoneConnected = peers.length > 0 && connectedCount === peers.length;
+  const activeCount = Math.max(activeUsers.length, peers.length + 1);
 
-    startLocalStream();
+  const spotlight = useMemo(() => {
+    if (isSharing && screenStream) return { key: 'local-screen', name: username || 'You', stream: screenStream, self: true };
+    const peerScreen = peers.find((p) => p.screen);
+    if (peerScreen) return { key: `screen-${peerScreen.socketId}`, name: peerScreen.username, stream: peerScreen.screen, self: false };
+    return null;
+  }, [isSharing, screenStream, peers, username]);
 
-    return () => {
-      mounted = false;
-      stopAllTracks();
-    };
-  }, []);
-
-  // Socket event listeners for real peer join/leave in call
-  useEffect(() => {
-    if (!socket) return;
-
-    socket.emit('call-joined', { roomId, user: currentUser });
-
-    socket.on('user-joined-call', (userObj) => {
-      setCallPeers((prev) => {
-        if (!prev.some(p => p.username === userObj.username)) {
-          return [...prev, userObj];
-        }
-        return prev;
-      });
-    });
-
-    socket.on('user-left-call', (userObj) => {
-      setCallPeers((prev) => prev.filter(p => p.username !== userObj.username));
-    });
-
-    return () => {
-      socket.off('user-joined-call');
-      socket.off('user-left-call');
-    };
-  }, [socket, roomId, currentUser]);
-
-  // Fullscreen change listener
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-  }, []);
-
-  const createDemoStreamCanvas = () => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 1280;
-    canvas.height = 720;
-    const ctx = canvas.getContext('2d');
-    
-    const drawDemoFrame = () => {
-      ctx.fillStyle = '#0a0d14';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      
-      // Cyber aesthetic background grid
-      ctx.strokeStyle = 'rgba(99, 102, 241, 0.15)';
-      ctx.lineWidth = 1;
-      for (let x = 0; x < canvas.width; x += 40) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, canvas.height);
-        ctx.stroke();
-      }
-      for (let y = 0; y < canvas.height; y += 40) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(canvas.width, y);
-        ctx.stroke();
-      }
-
-      ctx.fillStyle = '#6366f1';
-      ctx.font = 'bold 36px Inter, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(currentUser?.username || 'HD Video Stream', canvas.width / 2, canvas.height / 2 - 20);
-
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = '18px Inter, sans-serif';
-      ctx.fillText('⚡ 1080p WebRTC Media Connected', canvas.width / 2, canvas.height / 2 + 30);
-    };
-
-    drawDemoFrame();
-    const canvasStream = canvas.captureStream(15);
-    localStreamRef.current = canvasStream;
-    if (localVideoRef.current) {
-      localVideoRef.current.srcObject = canvasStream;
+  const handleJoin = useCallback(async () => {
+    setJoinError(null);
+    setIsJoining(true);
+    try {
+      await start({ audio: true, video: true });
+    } catch (error) {
+      setJoinError(error.message || 'Could not start the call.');
+    } finally {
+      setIsJoining(false);
     }
-  };
+  }, [start]);
 
-  const stopAllTracks = () => {
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(t => t.stop());
-    }
-    if (screenStreamRef.current) {
-      screenStreamRef.current.getTracks().forEach(t => t.stop());
-    }
-  };
+  const handleLeave = useCallback(() => {
+    stop();
+    if (typeof onClose === 'function') onClose();
+  }, [stop, onClose]);
 
-  // Toggle Mic Audio
-  const toggleMic = () => {
-    if (localStreamRef.current) {
-      const audioTrack = localStreamRef.current.getAudioTracks()[0];
-      if (audioTrack) {
-        audioTrack.enabled = !micOn;
-      }
-    }
-    setMicOn(!micOn);
-  };
+  // Release the camera/microphone on unmount and when the room changes. The
+  // hook owns the socket listeners and peer teardown; it does not stop local
+  // media tracks, so that cleanup is done here via the latest stop().
+  const stopRef = useRef(stop);
+  stopRef.current = stop;
+  useEffect(() => () => { stopRef.current(); }, [roomId]);
 
-  // Toggle Video Camera
-  const toggleVideo = () => {
-    if (localStreamRef.current) {
-      const videoTrack = localStreamRef.current.getVideoTracks()[0];
-      if (videoTrack) {
-        videoTrack.enabled = !videoOn;
-      }
-    }
-    setVideoOn(!videoOn);
-  };
+  const tileCount = peers.length + 1;
+  const gridCols = tileCount <= 1 ? 1 : tileCount === 2 ? 2 : tileCount <= 4 ? 2 : tileCount <= 6 ? 3 : 4;
 
-  // Screen Sharing WebRTC
-  const toggleScreenShare = async () => {
-    if (!isScreenSharing) {
-      try {
-        const screenStream = await navigator.mediaDevices.getDisplayMedia({
-          video: true,
-          audio: true
-        });
-        screenStreamRef.current = screenStream;
-        
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = screenStream;
-        }
-
-        setIsScreenSharing(true);
-        setActivePresenter({
-          username: currentUser?.username,
-          isSelf: true
-        });
-
-        if (socket) {
-          socket.emit('screen-share-status', { roomId, isSharing: true });
-        }
-
-        screenStream.getVideoTracks()[0].onended = () => {
-          stopScreenSharing();
-        };
-      } catch (err) {
-        console.error('Screen sharing failed:', err);
-      }
-    } else {
-      stopScreenSharing();
-    }
-  };
-
-  const stopScreenSharing = () => {
-    if (screenStreamRef.current) {
-      screenStreamRef.current.getTracks().forEach(t => t.stop());
-      screenStreamRef.current = null;
-    }
-    if (localStreamRef.current && localVideoRef.current) {
-      localVideoRef.current.srcObject = localStreamRef.current;
-    }
-    setIsScreenSharing(false);
-    setActivePresenter(null);
-    if (socket) {
-      socket.emit('screen-share-status', { roomId, isSharing: false });
-    }
-  };
-
-  // Toggle Fullscreen on Container
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      if (containerRef.current?.requestFullscreen) {
-        containerRef.current.requestFullscreen();
-      }
-    } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen();
-      }
-    }
-  };
-
-  const totalParticipants = callPeers.length + 1;
+  const rootClass = [
+    'vc-root', `vc-theme-${theme}`,
+    isMaximized ? 'vc-max' : '',
+    floating && !isMaximized ? 'vc-floating' : ''
+  ].filter(Boolean).join(' ');
 
   return (
-    <div
-      ref={containerRef}
-      className={`flex flex-col h-full bg-[#090c13] rounded-2xl overflow-hidden border border-white/[0.08] shadow-2xl transition-all duration-300 relative ${
-        isFullscreen ? 'fixed inset-0 z-50 rounded-none' : ''
-      }`}
-    >
-      
-      {/* Video Call Top Bar */}
-      <div className="bg-[#0f131c] px-4 py-2 border-b border-white/[0.08] flex items-center justify-between z-10 shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-xs font-bold text-white tracking-wide">VIDEO CALL</span>
-          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
-            {totalParticipants}
-          </span>
-        </div>
-
-        {/* Action Controls: Fullscreen & Maximize */}
-        <div className="flex items-center gap-1.5">
-          {activePresenter && (
-            <div className="hidden sm:flex items-center gap-1 px-2 py-0.5 bg-purple-500/20 border border-purple-500/40 rounded-full text-purple-300 text-[10px] font-semibold animate-pulse">
-              <span>{activePresenter.isSelf ? 'Presenting' : `${activePresenter.username}`}</span>
-            </div>
+    <div className={rootClass}>
+      <div className="vc-header">
+        <div className="vc-header-left">
+          <span className={`vc-live-dot${hasJoined && everyoneConnected ? '' : ' vc-live-dot--idle'}`} />
+          <span className="vc-title">Video call</span>
+          <span className="vc-count"><Users />{activeCount}</span>
+          {hasJoined && peers.length > 0 && (
+            <span className="vc-net">
+              {connectedCount}/{peers.length} connected
+              {failedCount > 0 ? ` · ${failedCount} failed` : ''}
+            </span>
           )}
-
+        </div>
+        <div className="vc-header-actions">
           {onToggleMaximize && (
             <button
+              type="button"
+              className="vc-iconbtn"
               onClick={onToggleMaximize}
-              className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
-                isMaximized
-                  ? 'bg-indigo-600/20 border-indigo-500/40 text-indigo-300'
-                  : 'bg-white/[0.04] border-white/10 text-slate-400 hover:text-white'
-              }`}
-              title={isMaximized ? 'Restore View Size' : 'Expand Video to Full Width'}
+              aria-label={isMaximized ? 'Restore size' : 'Expand video'}
+              title={isMaximized ? 'Restore size' : 'Expand video'}
             >
-              {isMaximized ? <Shrink className="w-3.5 h-3.5" /> : <Expand className="w-3.5 h-3.5" />}
+              {isMaximized ? <Minimize2 /> : <Maximize2 />}
             </button>
           )}
-
-          <button
-            onClick={toggleFullscreen}
-            className="p-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-slate-400 hover:text-white transition-all cursor-pointer"
-            title={isFullscreen ? 'Exit Full Screen' : 'Full Screen Mode'}
-          >
-            {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-          </button>
+          {onClose && (
+            <button type="button" className="vc-iconbtn" onClick={handleLeave} aria-label="Leave call" title="Leave call">
+              <PhoneOff />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Main Spacious Landscape Video Grid */}
-      <div className="flex-1 p-2.5 flex flex-col justify-center items-center overflow-hidden relative min-h-0">
-        
-        {/* Dynamic Grid Layout */}
-        <div className={`w-full h-full grid gap-2.5 ${
-          callPeers.length === 0
-            ? 'grid-cols-1'
-            : callPeers.length === 1
-            ? 'grid-cols-1 md:grid-cols-2'
-            : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
-        }`}>
-          
-          {/* Main User Landscape Tile */}
-          <div
-            className={`w-full h-full bg-[#05070d] rounded-2xl border transition-all duration-200 overflow-hidden relative flex items-center justify-center group shadow-xl ${
-              micOn
-                ? 'border-emerald-500/50 ring-1 ring-emerald-500/30'
-                : 'border-white/[0.1]'
-            }`}
-          >
-            <video
-              ref={localVideoRef}
-              autoPlay
-              playsInline
-              muted
-              className={`w-full h-full object-cover rounded-2xl bg-black ${videoOn ? 'block' : 'hidden'}`}
-            />
-
-            {!videoOn && (
-              <div className="flex flex-col items-center justify-center text-center p-4">
-                <div className={`w-16 h-16 md:w-20 md:h-20 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-2xl font-extrabold text-white border-2 shadow-2xl mb-2 transition-all ${
-                  micOn ? 'border-emerald-400 scale-105 shadow-emerald-500/40 animate-pulse' : 'border-slate-800'
-                }`}>
-                  {currentUser?.username?.charAt(0).toUpperCase() || 'U'}
+      <div className="vc-body">
+        {!hasJoined ? (
+          <div className="vc-join">
+            <div className="vc-join-card">
+              <div className="vc-join-head">
+                <PhoneCall />
+                <span className="vc-title" style={{ fontSize: 16 }}><strong>Join the call</strong></span>
+              </div>
+              <p className="vc-join-desc">
+                This connects your camera and microphone to the other people in this room over a
+                direct peer-to-peer (WebRTC) connection. Nothing is sent until you join.
+              </p>
+              <div className="vc-join-list">
+                <div><VideoIcon />Your browser will ask for camera and microphone access.</div>
+                <div><Users />Everyone already in the room appears once you connect.</div>
+                <div><MonitorUp />You can share your screen after joining.</div>
+              </div>
+              {joinError && (
+                <div className="vc-join-error">
+                  <AlertTriangle />
+                  <span>{joinError}</span>
                 </div>
-                <span className="text-xs font-bold text-slate-200">{currentUser?.username || 'You'}</span>
-                <span className="text-[10px] text-slate-500">Camera Off</span>
-              </div>
-            )}
-
-            {/* Speaking Status Pill */}
-            {micOn && (
-              <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
-                <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1 shadow-md animate-pulse backdrop-blur-md">
-                  <Volume2 className="w-2.5 h-2.5 text-emerald-400" />
-                  Speaking
-                </span>
-              </div>
-            )}
-
-            {/* User Name Badge */}
-            <div className="absolute bottom-2.5 left-2.5 bg-[#0d1117]/90 backdrop-blur-md px-2.5 py-1 rounded-lg border border-white/10 flex items-center gap-1.5 text-[11px] font-bold text-white shadow-md">
-              <span className={`w-1.5 h-1.5 rounded-full ${micOn ? 'bg-emerald-400 animate-ping' : 'bg-rose-500'}`} />
-              <span>{currentUser?.username || 'You'} {isScreenSharing ? '(Screen)' : ''}</span>
+              )}
+              <button type="button" className="vc-join-btn" onClick={handleJoin} disabled={isJoining || !socket || !roomId}>
+                <VideoIcon />{isJoining ? 'Connecting...' : 'Join call'}
+              </button>
+              {(!socket || !roomId) && (
+                <p className="vc-join-desc" style={{ color: 'var(--ink-faint)' }}>
+                  Waiting for the connection to the room to be ready.
+                </p>
+              )}
             </div>
           </div>
-
-          {/* Peer Tiles */}
-          {callPeers.map((peer, idx) => (
-            <div
-              key={idx}
-              className="w-full h-full bg-[#05070d] rounded-2xl border border-white/[0.1] flex flex-col items-center justify-center relative overflow-hidden group hover:border-indigo-500/50 transition-all shadow-xl p-4"
-            >
-              <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-white font-extrabold text-xl mb-1.5 shadow-lg">
-                {peer.username?.charAt(0).toUpperCase() || 'P'}
+        ) : (
+          <div className="vc-stage">
+            {spotlight ? (
+              <>
+                <div className="vc-spotlight">
+                  <StreamVideo stream={spotlight.stream} />
+                  <div className="vc-namebar">
+                    <span className="vc-tag vc-tag--screen">Screen</span>
+                    <span className="trunc">
+                      {spotlight.self ? 'You are sharing your screen' : `${spotlight.name} is sharing their screen`}
+                    </span>
+                  </div>
+                </div>
+                <div className="vc-strip">
+                  <LocalTile stream={localStream} username={username} micOn={micOn} cameraOn={cameraOn} isSharing={isSharing} />
+                  {peers.map((peer) => (
+                    <RemoteTile
+                      key={peer.socketId}
+                      peer={peer}
+                      speaking={canMeasure && speakingSet.has(peer.socketId)}
+                      showSpeaker={canMeasure}
+                    />
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="vc-tiles" style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}>
+                {peers.length === 0 ? (
+                  <>
+                    <LocalTile stream={localStream} username={username} micOn={micOn} cameraOn={cameraOn} isSharing={isSharing} />
+                    <div className="vc-waiting" style={{ gridColumn: `span ${gridCols - 1}` }}>
+                      <Users />
+                      <div className="vc-waiting-title">Waiting for others to join</div>
+                      <div className="vc-waiting-sub">
+                        You are the only one on the call. When teammates enter this room their video
+                        will appear here automatically.
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {peers.map((peer) => (
+                      <RemoteTile
+                        key={peer.socketId}
+                        peer={peer}
+                        speaking={canMeasure && speakingSet.has(peer.socketId)}
+                        showSpeaker={canMeasure}
+                      />
+                    ))}
+                    <LocalTile stream={localStream} username={username} micOn={micOn} cameraOn={cameraOn} isSharing={isSharing} />
+                  </>
+                )}
               </div>
-              <span className="text-xs font-bold text-slate-200">{peer.username}</span>
-              <span className="text-[10px] text-emerald-400 mt-0.5 font-semibold flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                Connected
-              </span>
-            </div>
-          ))}
+            )}
+          </div>
+        )}
+      </div>
 
+      {mediaError && (
+        <div className="vc-banner">
+          <AlertTriangle />
+          <span>{mediaError}</span>
+          <button type="button" className="vc-banner-x" onClick={clearError} aria-label="Dismiss message">
+            <X />
+          </button>
         </div>
+      )}
 
-      </div>
+      {hasJoined && (
+        <div className="vc-controls">
+          <button
+            type="button"
+            className={`vc-btn${micOn ? '' : ' vc-btn--off'}`}
+            onClick={toggleMic}
+            aria-pressed={!micOn}
+            title={micOn ? 'Mute microphone' : 'Unmute microphone'}
+          >
+            {micOn ? <Mic /> : <MicOff />}
+            <span>{micOn ? 'Mute' : 'Unmute'}</span>
+          </button>
 
-      {/* Clean Centered Bottom Control Bar (No Overlapping Room Text) */}
-      <div className="bg-[#0b0e14] px-4 py-2.5 border-t border-white/[0.08] flex items-center justify-center gap-3 z-10 shrink-0">
-        
-        {/* Mic Toggle */}
-        <button
-          onClick={toggleMic}
-          className={`p-3 rounded-full transition-all shadow-lg cursor-pointer ${
-            micOn
-              ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
-              : 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-600/30'
-          }`}
-          title={micOn ? 'Mute Microphone' : 'Unmute Microphone'}
-        >
-          {micOn ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
-        </button>
+          <button
+            type="button"
+            className={`vc-btn${cameraOn ? '' : ' vc-btn--off'}`}
+            onClick={toggleCamera}
+            aria-pressed={!cameraOn}
+            title={cameraOn ? 'Turn camera off' : 'Turn camera on'}
+          >
+            {cameraOn ? <VideoIcon /> : <VideoOff />}
+            <span>{cameraOn ? 'Stop video' : 'Start video'}</span>
+          </button>
 
-        {/* Video Toggle */}
-        <button
-          onClick={toggleVideo}
-          className={`p-3 rounded-full transition-all shadow-lg cursor-pointer ${
-            videoOn
-              ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
-              : 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-600/30'
-          }`}
-          title={videoOn ? 'Turn Off Camera' : 'Turn On Camera'}
-        >
-          {videoOn ? <Video className="w-4 h-4" /> : <VideoOff className="w-4 h-4" />}
-        </button>
+          <button
+            type="button"
+            className={`vc-btn${isSharing ? ' vc-btn--on-brand' : ''}`}
+            onClick={toggleScreenShare}
+            disabled={!canShareScreen || isRequestingShare}
+            aria-pressed={isSharing}
+            title={canShareScreen ? (isSharing ? 'Stop sharing screen' : 'Share your screen') : 'Screen sharing is not supported in this browser'}
+          >
+            <MonitorUp />
+            <span>{isSharing ? 'Stop share' : isRequestingShare ? 'Choose a window…' : 'Share screen'}</span>
+          </button>
 
-        {/* Screen Share Toggle */}
-        <button
-          onClick={toggleScreenShare}
-          className={`p-3 rounded-full transition-all shadow-lg cursor-pointer ${
-            isScreenSharing
-              ? 'bg-purple-600 hover:bg-purple-500 text-white shadow-purple-600/30'
-              : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
-          }`}
-          title={isScreenSharing ? 'Stop Presenting' : 'Share Screen'}
-        >
-          <MonitorUp className="w-4 h-4" />
-        </button>
-
-        {/* Full Screen Toggle in Bar */}
-        <button
-          onClick={toggleFullscreen}
-          className={`p-3 rounded-full transition-all shadow-lg cursor-pointer ${
-            isFullscreen
-              ? 'bg-indigo-600 text-white shadow-indigo-600/30'
-              : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
-          }`}
-          title={isFullscreen ? 'Exit Full Screen' : 'Full Screen'}
-        >
-          {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-        </button>
-
-        {/* End Call / Cut Call Button (Prominent & Centered) */}
-        <button
-          onClick={onLeaveCall}
-          className="px-4 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-full transition-all shadow-lg shadow-rose-600/40 flex items-center gap-1.5 cursor-pointer ml-1"
-          title="End Call / Cut Call"
-        >
-          <PhoneOff className="w-4 h-4" />
-          <span className="text-xs">End Call</span>
-        </button>
-
-      </div>
-
+          <button type="button" className="vc-btn vc-leave" onClick={handleLeave} title="Leave call">
+            <PhoneOff />
+            <span>Leave call</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 };

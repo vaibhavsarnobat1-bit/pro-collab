@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: 'class',
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
@@ -7,22 +8,20 @@ export default {
   theme: {
     extend: {
       colors: {
-        dark: {
-          900: '#0b0f19',
-          800: '#111827',
-          700: '#1f293d',
-          600: '#374151',
-          500: '#4b5563'
-        },
+        app: 'var(--bg)',
+        surface: 'var(--surface-solid)',
+        ink: 'var(--ink)',
+        inksoft: 'var(--ink-soft)',
+        faint: 'var(--ink-faint)',
         brand: {
-          primary: '#6366f1',
-          accent: '#8b5cf6',
-          teal: '#14b8a6',
-          rose: '#f43f5e'
+          DEFAULT: 'var(--brand)',
+          soft: 'var(--brand-soft)',
+          text: 'var(--brand-text)'
         }
       },
       fontFamily: {
-        sans: ['Inter', 'sans-serif'],
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        display: ['Instrument Serif', 'Iowan Old Style', 'Georgia', 'serif'],
         mono: ['Fira Code', 'JetBrains Mono', 'monospace']
       }
     },

@@ -1,18 +1,18 @@
-import React, { useState, useRef, useEffect } from 'react';
-import {
-  MessageSquare,
-  Send,
-  Smile,
-  User,
-  Users,
-  Lock,
-  Globe,
-  ChevronDown,
-  Sparkles,
-  ShieldAlert
-} from 'lucide-react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { MessageSquare, Send, Smile, Lock, Globe, ShieldAlert } from 'lucide-react';
+import { colorIndexFor, PRESENCE_COLORS } from '../lib/presence';
+import '../styles/rail.css';
 
-const EMOJI_LIST = ['👍', '🔥', '🚀', '❤️', '🎉', '💻', '💡', '✅', '😂', '👏'];
+const EMOJI_LIST = ['👍', '🔥', '🚀', '🎉', '💡', '✅', '👏', '🙌', '🤝', '🐛'];
+
+const formatTime = (value) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 5);
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
+
+const nameOf = (person) => (typeof person === 'string' ? person : person?.username);
 
 const ChatPanel = ({
   messages = [],
@@ -23,242 +23,178 @@ const ChatPanel = ({
   activeUsers = []
 }) => {
   const [inputText, setInputText] = useState('');
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [chatMode, setChatMode] = useState('group'); // 'group' | 'direct'
-  const [selectedRecipient, setSelectedRecipient] = useState('');
-  const chatEndRef = useRef(null);
+  const [showEmoji, setShowEmoji] = useState(false);
+  const [mode, setMode] = useState('group');
+  const [recipient, setRecipient] = useState('');
+  const [notice, setNotice] = useState('');
+  const endRef = useRef(null);
   const inputRef = useRef(null);
 
-  // Other connected users (excluding self)
-  const peerUsers = activeUsers.filter(
-    (u) => (typeof u === 'string' ? u : u.username) !== currentUser?.username
+  const peers = useMemo(
+    () => activeUsers.map(nameOf).filter((name) => name && name !== currentUser?.username),
+    [activeUsers, currentUser?.username]
   );
 
-  // Auto-select first peer when switching to direct message mode
   useEffect(() => {
-    if (chatMode === 'direct' && peerUsers.length > 0 && !selectedRecipient) {
-      const firstPeer = typeof peerUsers[0] === 'string' ? peerUsers[0] : peerUsers[0].username;
-      setSelectedRecipient(firstPeer);
+    if (mode === 'direct' && peers.length && (!recipient || !peers.includes(recipient))) {
+      setRecipient(peers[0]);
     }
-  }, [chatMode, peerUsers, selectedRecipient]);
+  }, [mode, peers, recipient]);
 
-  // Filter messages based on active mode
-  const displayedMessages = chatMode === 'group'
-    ? messages.filter((m) => !m.isPrivate)
-    : privateMessages.filter(
-        (m) =>
-          (m.sender === currentUser?.username && m.recipient === selectedRecipient) ||
-          (m.sender === selectedRecipient && m.recipient === currentUser?.username)
-      );
+  const thread = mode === 'group'
+    ? messages.filter((message) => !message.isPrivate)
+    : privateMessages.filter((message) =>
+      (message.sender === currentUser?.username && message.recipient === recipient) ||
+      (message.sender === recipient && message.recipient === currentUser?.username));
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [displayedMessages, chatMode]);
+    endRef.current?.scrollIntoView({ block: 'end' });
+  }, [thread.length, mode, recipient]);
 
-  const handleSend = (e) => {
-    e.preventDefault();
-    if (!inputText.trim()) return;
+  const send = (event) => {
+    event.preventDefault();
+    const text = inputText.trim();
+    if (!text) return;
 
-    if (chatMode === 'direct') {
-      if (!selectedRecipient) {
-        alert('Please select a member to send a private direct message.');
+    if (mode === 'direct') {
+      if (!recipient) {
+        setNotice('Nobody else is in this room yet, so there is no one to message privately.');
         return;
       }
-      if (onSendPrivateMessage) {
-        onSendPrivateMessage(selectedRecipient, inputText.trim());
-      }
+      onSendPrivateMessage?.(recipient, text);
     } else {
-      if (onSendMessage) {
-        onSendMessage(inputText.trim());
-      }
+      onSendMessage?.(text);
     }
 
     setInputText('');
-    setShowEmojiPicker(false);
-  };
-
-  const addEmoji = (emoji) => {
-    setInputText((prev) => prev + emoji);
-    setShowEmojiPicker(false);
-    inputRef.current?.focus();
+    setShowEmoji(false);
+    setNotice('');
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#0d1117] rounded-2xl border border-white/[0.08] shadow-2xl overflow-hidden select-none">
-      
-      {/* Header & Mode Switcher */}
-      <div className="bg-[#111620] px-3.5 py-2.5 border-b border-white/[0.08] flex items-center justify-between gap-2 shrink-0">
-        
-        {/* Mode Toggle Tabs */}
-        <div className="flex items-center gap-1 bg-[#080b11] p-1 rounded-xl border border-white/[0.08]">
+    <div className="cp-panel">
+      <div className="cp-head">
+        <div className="cp-modes" role="tablist" aria-label="Chat mode">
           <button
-            onClick={() => setChatMode('group')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              chatMode === 'group'
-                ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30'
-                : 'text-slate-400 hover:text-white'
-            }`}
+            role="tab"
+            aria-selected={mode === 'group'}
+            className={mode === 'group' ? 'is-on' : ''}
+            onClick={() => setMode('group')}
           >
-            <Globe className="w-3.5 h-3.5" />
-            <span># Group Chat</span>
+            <Globe size={12} /> Room
           </button>
-
           <button
-            onClick={() => setChatMode('direct')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              chatMode === 'direct'
-                ? 'bg-purple-600 text-white shadow-sm shadow-purple-600/30'
-                : 'text-slate-400 hover:text-white'
-            }`}
+            role="tab"
+            aria-selected={mode === 'direct'}
+            className={`is-dm ${mode === 'direct' ? 'is-on' : ''}`}
+            onClick={() => setMode('direct')}
           >
-            <Lock className="w-3.5 h-3.5" />
-            <span>1-on-1 DM</span>
+            <Lock size={12} /> Direct
           </button>
         </div>
 
-        {/* Recipient Dropdown in Direct Message Mode */}
-        {chatMode === 'direct' && (
-          <div className="flex items-center gap-1">
-            <select
-              value={selectedRecipient}
-              onChange={(e) => setSelectedRecipient(e.target.value)}
-              className="bg-[#161b24] border border-purple-500/40 text-purple-200 text-xs font-semibold rounded-lg px-2 py-1 outline-none cursor-pointer max-w-[130px] truncate"
-            >
-              {peerUsers.length === 0 ? (
-                <option value="">No peers online</option>
-              ) : (
-                peerUsers.map((u) => {
-                  const name = typeof u === 'string' ? u : u.username;
-                  return (
-                    <option key={name} value={name} className="bg-[#121620] text-white">
-                      @{name}
-                    </option>
-                  );
-                })
-              )}
-            </select>
-          </div>
+        {mode === 'direct' && (
+          <select
+            className="cp-peer-select"
+            value={recipient}
+            onChange={(event) => setRecipient(event.target.value)}
+            aria-label="Direct message recipient"
+          >
+            {peers.length === 0 ? <option value="">No one else here</option> : null}
+            {peers.map((name) => (
+              <option key={name} value={name}>@{name}</option>
+            ))}
+          </select>
         )}
       </div>
 
-      {/* Direct Message Header Notice */}
-      {chatMode === 'direct' && (
-        <div className="px-3.5 py-1.5 bg-purple-500/10 border-b border-purple-500/20 flex items-center justify-between text-[11px] text-purple-300 font-semibold">
-          <div className="flex items-center gap-1.5">
-            <Lock className="w-3 h-3 text-purple-400" />
-            <span>Private Chat with <strong className="text-white">@{selectedRecipient || 'Member'}</strong></span>
-          </div>
-          <span className="text-[10px] text-purple-400/80">Only you & @{selectedRecipient || 'Member'} can see</span>
+      {mode === 'direct' && recipient && (
+        <div className="cp-dm-note">
+          <span><ShieldAlert size={11} style={{ display: 'inline', verticalAlign: -2 }} /> Private thread with <strong>@{recipient}</strong></span>
+          <span>room peers cannot read this</span>
         </div>
       )}
 
-      {/* Messages Feed */}
-      <div className="flex-1 p-3 overflow-y-auto space-y-2.5 min-h-[140px] select-text">
-        {displayedMessages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center text-slate-500 py-6">
-            <MessageSquare className="w-7 h-7 text-slate-600 mb-1.5 opacity-50" />
-            <span className="text-xs font-semibold text-slate-400">
-              {chatMode === 'direct'
-                ? `No private messages with @${selectedRecipient || 'member'}`
-                : 'No group messages yet'}
-            </span>
-            <span className="text-[10px] text-slate-500 mt-0.5">
-              {chatMode === 'direct' ? 'Say hi in 1-on-1 private chat!' : 'Start the discussion with the room!'}
-            </span>
+      <div className="cp-feed">
+        {thread.length === 0 ? (
+          <div className="cp-empty">
+            <MessageSquare size={22} />
+            <strong>{mode === 'direct' ? `Nothing sent to @${recipient || 'them'} yet` : 'The room has not spoken yet'}</strong>
+            <span>{mode === 'direct' ? 'Direct messages stay between the two of you.' : 'Messages are kept in memory for this room only.'}</span>
           </div>
         ) : (
-          displayedMessages.map((msg, index) => {
-            const isMe = msg.sender === currentUser?.username;
+          thread.map((message, index) => {
+            const isMe = message.sender === currentUser?.username;
+            const tint = PRESENCE_COLORS[colorIndexFor(message.sender || 'anon')];
             return (
               <div
-                key={msg.id || index}
-                className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} space-y-0.5`}
+                key={message.id || `${message.timestamp}-${index}`}
+                className={`cp-row ${isMe ? 'is-me' : ''} ${message.isPrivate || mode === 'direct' ? 'is-dm' : ''}`}
               >
-                <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-medium px-1">
-                  <span className="font-bold text-slate-300">{isMe ? 'You' : msg.sender}</span>
-                  {msg.isPrivate && (
-                    <span className="text-purple-400 text-[9px] font-semibold flex items-center gap-0.5">
-                      <Lock className="w-2.5 h-2.5" /> Direct
-                    </span>
+                <div className="cp-meta">
+                  {isMe ? (
+                    <b>You</b>
+                  ) : (
+                    <>
+                      <i
+                        style={{
+                          width: 6,
+                          height: 6,
+                          borderRadius: 2,
+                          background: tint.hex,
+                          display: 'inline-block'
+                        }}
+                      />
+                      <b>{message.sender}</b>
+                    </>
                   )}
-                  <span>•</span>
-                  <span>{msg.timestamp}</span>
+                  {(message.isPrivate || mode === 'direct') && (
+                    <span className="cp-tag-dm"><Lock size={9} /> dm</span>
+                  )}
+                  <span>{formatTime(message.timestamp)}</span>
                 </div>
-
-                <div
-                  className={`px-3 py-2 rounded-2xl max-w-[85%] text-xs leading-relaxed shadow-md break-words ${
-                    isMe
-                      ? msg.isPrivate
-                        ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-br-none'
-                        : 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-br-none'
-                      : 'bg-[#161b24] text-slate-100 border border-white/[0.08] rounded-bl-none'
-                  }`}
-                >
-                  {msg.text}
-                </div>
+                <div className="cp-bubble">{message.text}</div>
               </div>
             );
           })
         )}
-        <div ref={chatEndRef} />
+        <div ref={endRef} />
       </div>
 
-      {/* Emoji Picker Popup */}
-      {showEmojiPicker && (
-        <div className="p-2 bg-[#0a0d14] border-t border-white/[0.08] grid grid-cols-5 gap-1 animate-in fade-in slide-in-from-bottom-2">
+      {showEmoji && (
+        <div className="cp-emoji">
           {EMOJI_LIST.map((emoji) => (
-            <button
-              key={emoji}
-              onClick={() => addEmoji(emoji)}
-              className="p-1.5 hover:bg-white/[0.08] rounded text-sm transition-colors flex items-center justify-center cursor-pointer"
-            >
+            <button key={emoji} type="button" onClick={() => { setInputText((prev) => prev + emoji); inputRef.current?.focus(); }}>
               {emoji}
             </button>
           ))}
         </div>
       )}
 
-      {/* Chat Input Bar */}
-      <form
-        onSubmit={handleSend}
-        className="p-2.5 bg-[#111620] border-t border-white/[0.08] flex items-center gap-2 shrink-0"
-      >
+      {notice && <div className="cp-dm-note" style={{ background: 'rgba(144,144,144,0.1)', color: 'var(--bad)' }}>{notice}</div>}
+
+      <form className="cp-compose" onSubmit={send}>
         <button
           type="button"
-          onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-          className={`p-2 rounded-xl transition-colors cursor-pointer ${
-            showEmojiPicker
-              ? 'bg-indigo-600/30 text-indigo-300'
-              : 'text-slate-400 hover:text-white hover:bg-white/[0.06]'
-          }`}
-          title="Pick Emoji"
+          className={`cp-mini ${showEmoji ? 'is-on' : ''}`}
+          onClick={() => setShowEmoji((value) => !value)}
+          aria-label="Insert emoji"
         >
-          <Smile className="w-4 h-4" />
+          <Smile size={15} />
         </button>
-
         <input
           ref={inputRef}
-          type="text"
+          className="cp-input"
           value={inputText}
-          onChange={(e) => setInputText(e.target.value)}
-          placeholder={
-            chatMode === 'direct'
-              ? `Private message to @${selectedRecipient || 'member'}...`
-              : 'Message #group chat (press Enter to send)...'
-          }
-          className="flex-1 bg-[#080b11] border border-white/[0.1] focus:border-indigo-500 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 outline-none transition-all"
+          onChange={(event) => setInputText(event.target.value)}
+          placeholder={mode === 'direct' ? `Message @${recipient || '…'}` : 'Message the room'}
+          maxLength={4000}
+          aria-label="Chat message"
         />
-
-        <button
-          type="submit"
-          disabled={!inputText.trim()}
-          className="p-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white rounded-xl transition-all shadow-md shadow-indigo-600/30 shrink-0 cursor-pointer"
-          title="Send Message"
-        >
-          <Send className="w-4 h-4" />
+        <button type="submit" className="cp-send" disabled={!inputText.trim()} aria-label="Send message">
+          <Send size={14} />
         </button>
       </form>
-
     </div>
   );
 };

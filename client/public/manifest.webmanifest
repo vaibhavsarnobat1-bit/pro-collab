@@ -1,0 +1,15 @@
+{
+  "name": "ProCollab — Real-time code rooms",
+  "short_name": "ProCollab",
+  "description": "Collaborative Monaco editor rooms with multi-cursor sync, WebRTC video and snippet libraries.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a0e17",
+  "theme_color": "#6366f1",
+  "icons": [
+    { "src": "./favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "./favicon.svg", "sizes": "192x192 512x512", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

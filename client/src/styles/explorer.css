@@ -1,0 +1,461 @@
+/* ═══════════════════════════════════════════════════════════
+   FILE EXPLORER
+   ═══════════════════════════════════════════════════════════ */
+
+.fe-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: transparent;
+  color: var(--ink);
+}
+
+.fe-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 8px 8px 8px 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-2);
+}
+
+.fe-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--ink-faint);
+}
+
+.fe-title strong {
+  font-family: 'Fira Code', ui-monospace, monospace;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fe-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--warn);
+  color: var(--bg);
+  font-family: 'Fira Code', ui-monospace, monospace;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.fe-tools-static {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex-shrink: 0;
+}
+
+.fe-tool {
+  display: grid;
+  place-items: center;
+  width: 21px;
+  height: 21px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+  opacity: 0.75;
+  transition: color 0.14s, background 0.14s, opacity 0.14s;
+}
+
+.fe-tool:hover {
+  color: var(--ink);
+  background: var(--brand-soft);
+  opacity: 1;
+}
+
+.fe-tool.is-danger:hover {
+  color: var(--bad);
+  background: rgba(144,144,144,0.12);
+}
+
+.fe-tool.is-spin svg {
+  animation: feSpin 0.8s linear infinite;
+}
+
+@keyframes feSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* ───────────────────────────────────────────── search */
+
+.fe-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-faint);
+}
+
+.fe-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-family: 'Fira Code', ui-monospace, monospace;
+  font-size: 11px;
+}
+
+.fe-search input:focus {
+  outline: none;
+}
+
+.fe-search button {
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+}
+
+.fe-search button:hover {
+  color: var(--bad);
+}
+
+/* ───────────────────────────────────────────── inline inputs */
+
+.fe-inline-input {
+  flex: 1;
+  min-width: 0;
+  height: 19px;
+  padding: 0 5px;
+  border-radius: 5px;
+  border: 1px solid var(--brand);
+  background: var(--input-bg);
+  color: var(--ink);
+  font-family: 'Fira Code', ui-monospace, monospace;
+  font-size: 11px;
+}
+
+.fe-inline-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--brand-soft);
+}
+
+.fe-root-create {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--brand-line);
+  background: var(--brand-soft);
+  color: var(--brand-text);
+}
+
+.fe-confirm,
+.fe-cancel {
+  display: grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+  background: transparent;
+}
+
+.fe-confirm { color: var(--ok); }
+.fe-cancel { color: var(--ink-faint); }
+.fe-confirm:hover { background: rgba(173,173,173,0.16); }
+.fe-cancel:hover { background: var(--line-strong); color: var(--ink); }
+
+/* ───────────────────────────────────────────── tree */
+
+.fe-tree {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 5px 4px 8px;
+}
+
+.fe-node {
+  position: relative;
+}
+
+.fe-children {
+  position: relative;
+}
+
+/* Indent guide so deep folders still read as a hierarchy. */
+.fe-children::before {
+  content: '';
+  position: absolute;
+  left: 11px;
+  top: 1px;
+  bottom: 3px;
+  width: 1px;
+  background: var(--line);
+}
+
+.fe-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding-right: 5px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  color: var(--ink-soft);
+  font-size: 11.5px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.13s, color 0.13s, border-color 0.13s;
+}
+
+.fe-row:hover {
+  background: var(--brand-soft);
+  color: var(--ink);
+}
+
+.fe-row:focus-visible {
+  outline: none;
+  border-color: var(--brand-line);
+  background: var(--brand-soft);
+}
+
+.fe-row.is-active {
+  background: var(--brand-soft);
+  border-color: var(--brand-line);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.fe-row.is-armed {
+  border-color: var(--bad);
+  background: rgba(144,144,144,0.08);
+}
+
+.fe-twisty {
+  display: grid;
+  place-items: center;
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  color: var(--ink-faint);
+}
+
+.fe-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: 'Fira Code', ui-monospace, monospace;
+  font-size: 11px;
+}
+
+.fe-presence {
+  display: inline-flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.fe-presence i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+
+.fe-tools {
+  display: flex;
+  gap: 0;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.13s;
+}
+
+.fe-row:hover .fe-tools,
+.fe-row.is-active .fe-tools {
+  opacity: 1;
+}
+
+/* Two-step delete strip */
+.fe-arm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 2px 0 3px;
+  padding: 5px 7px;
+  border-radius: 7px;
+  border: 1px dashed var(--bad);
+  background: rgba(144,144,144,0.08);
+  font-size: 10.5px;
+  color: var(--ink-soft);
+  animation: feArmIn 0.18s ease-out;
+}
+
+@keyframes feArmIn {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: none; }
+}
+
+.fe-arm b {
+  color: var(--ink);
+  font-family: 'Fira Code', ui-monospace, monospace;
+}
+
+.fe-arm-yes,
+.fe-arm-no {
+  height: 19px;
+  padding: 0 8px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: filter 0.14s;
+}
+
+.fe-arm-yes {
+  border: 0;
+  background: var(--bad);
+  color: #fff;
+}
+
+.fe-arm-no {
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--ink-soft);
+}
+
+.fe-arm-yes:hover,
+.fe-arm-no:hover {
+  filter: brightness(1.1);
+}
+
+/* ───────────────────────────────────────────── blank state */
+
+.fe-blank {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 26px 14px;
+  text-align: center;
+  color: var(--ink-faint);
+}
+
+.fe-blank svg {
+  color: var(--brand-text);
+  opacity: 0.5;
+}
+
+.fe-blank strong {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+
+.fe-blank span {
+  font-size: 11px;
+  line-height: 1.55;
+  max-width: 26ch;
+}
+
+.fe-cta {
+  margin-top: 3px;
+  width: 100%;
+  height: 29px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+
+.fe-cta:hover {
+  filter: brightness(1.08);
+}
+
+.fe-cta.is-ghost {
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  color: var(--ink-soft);
+}
+
+.fe-cta.is-ghost:hover {
+  border-color: var(--brand-line);
+  background: var(--brand-soft);
+  color: var(--ink);
+  filter: none;
+}
+
+/* ───────────────────────────────────────────── footer */
+
+.fe-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 5px 10px;
+  border-top: 1px solid var(--line);
+  background: var(--surface-2);
+  font-family: 'Fira Code', ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.03em;
+  color: var(--ink-faint);
+}
+
+.fe-foot-peers {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ok);
+}
+
+.fe-foot-mode {
+  margin-left: auto;
+  text-transform: uppercase;
+}
+
+.fe-download {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-faint);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.fe-download:hover {
+  color: var(--brand-text);
+  border-color: var(--brand-line);
+  background: var(--brand-soft);
+}

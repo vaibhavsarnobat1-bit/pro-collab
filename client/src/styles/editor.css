@@ -1,0 +1,463 @@
+/* ═══════════════════════════════════════════════════════════
+   EDITOR SHELL — tab strip, Monaco frame, status rail
+   Dark-first: the editor stays a dark surface in both themes,
+   because a light Monaco next to a light chrome loses its syntax
+   contrast. Tokens come from .dark-scope in index.css.
+   ═══════════════════════════════════════════════════════════ */
+
+.pc-editor-frame {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--bg-deep);
+  box-shadow: 0 18px 40px -28px rgba(0, 0, 0, 0.75);
+}
+
+/* A hairline of brand colour down the left edge reads as "this pane is live"
+   without needing a glow. */
+.pc-editor-frame::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(180deg, var(--brand), transparent 55%);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.pc-editor-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  /* Grid gives the Monaco wrapper a definite cell to stretch into. Its inline
+     height:100% cannot resolve against a flex-stretched parent, which left the
+     editor measuring a 5px container. */
+  display: grid;
+}
+
+.pc-editor-body > * {
+  min-height: 0;
+}
+
+.pc-editor-loading,
+.pc-editor-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-family: 'Fira Code', ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
+.pc-editor-empty {
+  flex-direction: column;
+  gap: 6px;
+  text-align: center;
+  padding: 32px;
+}
+
+.pc-editor-empty-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  letter-spacing: -0.01em;
+}
+
+.pc-editor-empty-sub {
+  max-width: 34ch;
+  line-height: 1.55;
+  color: var(--ink-faint);
+  font-size: 12px;
+}
+
+/* ────────────────────────────────────────────── status rail */
+
+.pc-editor-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 12px;
+  height: 28px;
+  flex-shrink: 0;
+  border-top: 1px solid var(--line);
+  background: var(--surface-solid);
+  font-family: 'Fira Code', ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--ink-faint);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.pc-status-left,
+.pc-status-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pc-status-file {
+  color: var(--brand-text);
+  font-weight: 600;
+  max-width: 26ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Slash separators instead of dots — looks like a path, not a bullet list. */
+.pc-status-dot {
+  color: var(--line-strong);
+  user-select: none;
+}
+
+.pc-status-peers {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.pc-peer-dot {
+  display: inline-grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 6px;
+  font-size: 9.5px;
+  font-weight: 800;
+  color: #06080f;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+
+.pc-lang-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+}
+
+.pc-lang-picker select {
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: var(--ink-soft);
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.pc-lang-picker select:hover {
+  color: var(--ink);
+}
+
+.pc-lang-picker option {
+  background: var(--surface-solid);
+  color: var(--ink);
+}
+
+.pc-sync-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.pc-sync-state i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.pc-sync-state.is-live {
+  color: var(--ok);
+}
+
+.pc-sync-state.is-live i {
+  animation: pcSyncPulse 2s ease-in-out infinite;
+}
+
+.pc-sync-state.is-off {
+  color: var(--bad);
+}
+
+@keyframes pcSyncPulse {
+  0%, 100% { box-shadow: 0 0 0 0 currentColor; opacity: 1; }
+  50% { box-shadow: 0 0 0 4px transparent; opacity: 0.6; }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TAB STRIP
+   ═══════════════════════════════════════════════════════════ */
+
+.et-bar {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 10px;
+  height: 38px;
+  flex-shrink: 0;
+  padding-left: 8px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-solid);
+  overflow: hidden;
+}
+
+.et-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.et-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.et-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--ink-faint);
+  font-family: 'Fira Code', ui-monospace, monospace;
+  font-size: 11.5px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.16s, background 0.16s, border-color 0.16s;
+}
+
+.et-tab:hover {
+  color: var(--ink-soft);
+  background: var(--brand-soft);
+}
+
+.et-tab.is-active {
+  color: var(--ink);
+  font-weight: 700;
+  border-bottom-color: var(--brand);
+  background: linear-gradient(180deg, var(--brand-soft), transparent);
+}
+
+.et-tab.is-remote {
+  border-bottom-color: var(--et-peer, var(--brand));
+}
+
+.et-tab-name {
+  max-width: 17ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.et-close {
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.et-tab:hover .et-close,
+.et-tab.is-active .et-close {
+  opacity: 0.65;
+}
+
+.et-close:hover {
+  opacity: 1;
+  background: var(--line-strong);
+}
+
+.et-tab-peers {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.et-peer-tick {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+
+.et-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 8px;
+  flex-shrink: 0;
+}
+
+.et-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.16s, border-color 0.16s, color 0.16s, transform 0.1s;
+}
+
+.et-btn:hover {
+  border-color: var(--brand-line);
+  color: var(--ink);
+}
+
+.et-btn:active {
+  transform: scale(0.97);
+}
+
+.et-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.et-btn.is-dirty {
+  border-color: transparent;
+  background: var(--brand);
+  color: #fff;
+}
+
+.et-btn.is-dirty:hover {
+  filter: brightness(1.08);
+  color: #fff;
+}
+
+.et-btn.is-run {
+  border-color: transparent;
+  background: var(--ok);
+  color: var(--bg);
+}
+
+.et-btn.is-stop {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+.et-disk {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 6px;
+  background: var(--warn);
+  color: var(--bg);
+  font-family: 'Fira Code', ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   REMOTE CARETS — Monaco decoration classNames
+   Generated for all 8 presence colours. Must be global CSS,
+   Monaco injects these into the view lines.
+   ═══════════════════════════════════════════════════════════ */
+
+.pc-caret {
+  border-left-width: 2px;
+  border-left-style: solid;
+  margin-left: -1px;
+}
+
+/* Rendered as a Monaco content widget, so Monaco owns top/left on this node.
+   The lift puts the plate above the caret line instead of over the text. */
+.pc-caret-tag {
+  border-radius: 4px 4px 4px 0;
+  padding: 1px 5px 2px;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 10px !important;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  line-height: 1.35;
+  color: #06080f;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+  transform: translateY(-100%);
+  opacity: 0.97;
+  z-index: 40;
+}
+
+.pc-selection {
+  opacity: 0.45;
+}
+
+.pc-caret-0 { border-left-color: #ffffff; }
+.pc-caret-1 { border-left-color: #ededed; }
+.pc-caret-2 { border-left-color: #dbdbdb; }
+.pc-caret-3 { border-left-color: #c9c9c9; }
+.pc-caret-4 { border-left-color: #b7b7b7; }
+.pc-caret-5 { border-left-color: #a5a5a5; }
+.pc-caret-6 { border-left-color: #939393; }
+.pc-caret-7 { border-left-color: #818181; }
+
+.pc-caret-tag-0 { background: #ffffff; }
+.pc-caret-tag-1 { background: #ededed; }
+.pc-caret-tag-2 { background: #dbdbdb; }
+.pc-caret-tag-3 { background: #c9c9c9; }
+.pc-caret-tag-4 { background: #b7b7b7; }
+.pc-caret-tag-5 { background: #a5a5a5; }
+.pc-caret-tag-6 { background: #939393; }
+.pc-caret-tag-7 { background: #818181; }
+
+.pc-selection-0 { background: rgba(115,115,115,0.38); }
+.pc-selection-1 { background: rgba(170,170,170,0.34); }
+.pc-selection-2 { background: rgba(147,147,147,0.34); }
+.pc-selection-3 { background: rgba(193,193,193,0.32); }
+.pc-selection-4 { background: rgba(165,165,165,0.34); }
+.pc-selection-5 { background: rgba(153,153,153,0.36); }
+.pc-selection-6 { background: rgba(144,144,144,0.34); }
+.pc-selection-7 { background: rgba(184,184,184,0.34); }
+
+/* Monaco's own chrome is heavy-handed by default — trim it. */
+.pc-editor-body .monaco-editor .overflow-guard {
+  border-radius: 0;
+}
+
+.pc-editor-body .monaco-editor .scroll-decoration {
+  box-shadow: none !important;
+}
+
+.pc-editor-body .monaco-editor .cursors-layer > .cursor {
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.45);
+}
+
+@media (max-width: 900px) {
+  .pc-status-left .pc-status-dot + span:last-child,
+  .pc-status-peers {
+    display: none;
+  }
+  .pc-editor-status {
+    height: 26px;
+    font-size: 10.5px;
+  }
+  .et-disk {
+    display: none;
+  }
+}

@@ -1,328 +1,409 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
-  Sparkles,
-  Send,
-  Loader2,
-  Bot,
-  User,
-  Copy,
-  Check,
-  ArrowRight,
-  FilePlus,
-  Play,
-  RotateCcw,
-  Code2,
-  Bug,
-  HelpCircle,
-  FileCode,
-  Layers,
-  X
+  Sparkles, Send, Bot, Copy, Check, ArrowRight, FilePlus, RotateCcw, Cpu, X,
+  PencilRuler, MessageSquare, Layers, AlertTriangle
 } from 'lucide-react';
 import api from '../services/api';
+import '../styles/rail.css';
 
-const QUICK_PROMPTS = [
-  { label: '✨ Fix Bugs', prompt: 'Find and fix all bugs and optimize this code', action: 'fix' },
-  { label: '🌐 Generate Web Page', prompt: 'Create a modern dark-mode responsive HTML/CSS/JS web page with animations', action: 'chat' },
-  { label: '🎨 React Component', prompt: 'Create an interactive React component with state, buttons, and modern styling', action: 'chat' },
-  { label: '📝 Explain Code', prompt: 'Explain how this code works step-by-step in simple terms', action: 'explain' },
-  { label: '⚡ Optimize', prompt: 'Refactor this code to follow modern best practices and clean architecture', action: 'chat' }
+const MODEL_STORAGE_KEY = 'pc-ai-model';
+
+const QUICK_ANSWER = [
+  { label: 'Explain this file', prompt: 'Explain what this file does, top to bottom', action: 'explain' },
+  { label: 'Find the bugs', prompt: 'Find and fix the bugs in this code', action: 'fix' },
+  { label: 'Optimize', prompt: 'Refactor this for modern best practices', action: 'optimize' },
+  { label: 'Build a page', prompt: 'Create a responsive dark-mode landing page with HTML, CSS and JS', action: 'chat' },
+  { label: 'React component', prompt: 'Create an interactive React component with state and buttons', action: 'chat' },
+  { label: 'Debounce helper', prompt: 'Write debounce and throttle helpers', action: 'chat' }
 ];
 
+const QUICK_EDIT = [
+  { label: 'Build a landing page', prompt: 'Build a complete, responsive landing page in index.html, styles.css and app.js for this project' },
+  { label: 'Make it responsive', prompt: 'Make every page in this project responsive on phones and tablets without changing the content' },
+  { label: 'Add dark mode', prompt: 'Add a working light/dark theme toggle to this project, remembering the choice in localStorage' },
+  { label: 'Improve the design', prompt: 'Restyle this project with a calm, professional design: consistent spacing, one accent colour and readable type' },
+  { label: 'Fix layout bugs', prompt: 'Review the HTML and CSS, then fix overflowing, misaligned and overlapping elements' },
+  { label: 'Add a contact form', prompt: 'Add a contact form with labels, client-side validation and an accessible success message' }
+];
+
+const stamp = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
 const AiAssistantPanel = ({
-  activeFileContent = '',
-  activeFilePath = 'index.js',
-  activeLanguage = 'javascript',
+  activeCode = '',
+  activeFilePath = null,
+  language = 'plaintext',
+  filesMap = {},
   onApplyCodeToEditor,
   onCreateFileFromAi,
+  onApplyProjectOps,
   onClose
 }) => {
-  const [messages, setMessages] = useState([
-    {
-      id: 'welcome',
-      sender: 'ai',
-      text: `Hello! I'm your **Pro-Collab AI Coding Assistant** (like Antigravity). I can write code, build entire web pages, fix bugs, and refactor functions.\n\nTell me what you'd like to build, or click a quick action below!`,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    }
-  ]);
-  const [inputText, setInputText] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [copiedCodeId, setCopiedCodeId] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [mode, setMode] = useState('edit');
+  const [copiedId, setCopiedId] = useState(null);
   const [appliedId, setAppliedId] = useState(null);
-  const messagesEndRef = useRef(null);
-  const inputRef = useRef(null);
+  const [engine, setEngine] = useState(null);
+  const [models, setModels] = useState([]);
+  const [modelId, setModelId] = useState(() => {
+    try {
+      return localStorage.getItem(MODEL_STORAGE_KEY) || '';
+    } catch {
+      return '';
+    }
+  });
+  const endRef = useRef(null);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    let cancelled = false;
 
-  const handleSendPrompt = async (promptToSend, action = 'chat') => {
-    const text = promptToSend || inputText.trim();
-    if (!text || isLoading) return;
+    api.get('/ai/status')
+      .then((response) => { if (!cancelled) setEngine(response.data); })
+      .catch(() => { if (!cancelled) setEngine({ kind: 'local', label: 'Offline engine' }); });
 
-    const userMessage = {
-      id: 'usr_' + Date.now(),
-      sender: 'user',
-      text: text,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    api.get('/ai/models')
+      .then((response) => {
+        if (cancelled) return;
+        const list = response.data?.models || [];
+        setModels(list);
+        setModelId((current) => {
+          if (current && list.some((model) => model.id === current)) return current;
+          const firstConfigured = list.find((model) => model.configured);
+          return firstConfigured?.id || current;
+        });
+      })
+      .catch(() => { if (!cancelled) setModels([]); });
+
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    try {
+      if (modelId) localStorage.setItem(MODEL_STORAGE_KEY, modelId);
+    } catch {
+      /* storage can be blocked; the picker still works for this session */
+    }
+  }, [modelId]);
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ block: 'end' });
+  }, [messages, busy]);
+
+  const selectedModel = useMemo(
+    () => models.find((model) => model.id === modelId) || null,
+    [models, modelId]
+  );
+
+  const configuredModels = useMemo(() => models.filter((model) => model.configured), [models]);
+  const isModel = engine?.kind === 'model' || configuredModels.length > 0;
+  const canSend = Boolean(input.trim()) && !busy;
+
+  const history = useCallback(
+    () => messages.slice(-8).map((message) => ({ sender: message.role === 'user' ? 'user' : 'ai', text: message.text })),
+    [messages]
+  );
+
+  const sendToChat = useCallback(async (text, action) => {
+    const response = await api.post('/ai/chat', {
+      prompt: text,
+      code: activeCode,
+      filePath: activeFilePath || '',
+      language,
+      action,
+      modelId,
+      history: history()
+    });
+    const data = response.data || {};
+    return {
+      text: data.reply || 'No reply returned.',
+      code: data.codeSnippet || '',
+      fileName: data.suggestedFileName || '',
+      outLanguage: data.suggestedLanguage || language,
+      explanation: data.explanation || '',
+      note: data.fallbackNote || '',
+      engine: data.engine || 'local'
     };
+  }, [activeCode, activeFilePath, language, modelId, history]);
 
-    setMessages((prev) => [...prev, userMessage]);
-    setInputText('');
-    setIsLoading(true);
+  const sendToAgent = useCallback(async (text) => {
+    const files = {};
+    Object.entries(filesMap || {}).forEach(([path, file]) => {
+      if (file && typeof file.content === 'string') files[path] = { path, content: file.content };
+    });
+
+    const response = await api.post('/ai/agent', {
+      prompt: text,
+      files,
+      activeFilePath: activeFilePath || '',
+      modelId,
+      history: history()
+    });
+    const data = response.data || {};
+    return {
+      text: data.reply || 'The assistant returned nothing usable.',
+      operations: Array.isArray(data.operations) ? data.operations : [],
+      note: data.note || '',
+      engine: data.engine || 'local'
+    };
+  }, [filesMap, activeFilePath, modelId, history]);
+
+  const ask = useCallback(async (promptText, action = 'chat') => {
+    const text = (promptText ?? input).trim();
+    if (!text || busy) return;
+
+    setMessages((prev) => [...prev, { id: `u${Date.now()}`, role: 'user', text, at: stamp() }]);
+    setInput('');
+    setBusy(true);
 
     try {
-      const response = await api.post('/ai/chat', {
-        prompt: text,
-        code: activeFileContent,
-        filePath: activeFilePath,
-        language: activeLanguage,
-        action: action
-      });
-
-      const aiMessage = {
-        id: 'ai_' + Date.now(),
-        sender: 'ai',
-        text: response.data.reply || 'Generated code for your prompt:',
-        codeSnippet: response.data.codeSnippet || '',
-        suggestedFileName: response.data.suggestedFileName || '',
-        suggestedLanguage: response.data.suggestedLanguage || activeLanguage,
-        explanation: response.data.explanation || '',
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-
-      setMessages((prev) => [...prev, aiMessage]);
-    } catch (err) {
-      console.error('AI Request Error:', err);
+      const answer = mode === 'edit' ? await sendToAgent(text) : await sendToChat(text, action);
       setMessages((prev) => [
         ...prev,
         {
-          id: 'err_' + Date.now(),
-          sender: 'ai',
-          text: '⚠️ Could not generate AI response. Please make sure the server is running.',
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          id: `a${Date.now()}`,
+          role: 'ai',
+          mode,
+          ...answer,
+          at: stamp()
+        }
+      ]);
+    } catch (error) {
+      const status = error.response?.status;
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `e${Date.now()}`,
+          role: 'ai',
+          text: status === 429
+            ? error.response.data.message
+            : 'The assistant did not answer — the server is unreachable. The editor and sync still work without it.',
+          at: stamp(),
+          engine: 'error'
         }
       ]);
     } finally {
-      setIsLoading(false);
+      setBusy(false);
+    }
+  }, [input, busy, mode, sendToAgent, sendToChat]);
+
+  const copy = async (code, id) => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 1800);
+    } catch {
+      setMessages((prev) => [...prev, { id: `c${Date.now()}`, role: 'ai', text: 'Clipboard access was refused by the browser — select the code and copy it manually.', at: stamp() }]);
     }
   };
 
-  const handleCopyCode = (code, id) => {
-    navigator.clipboard.writeText(code);
-    setCopiedCodeId(id);
-    setTimeout(() => setCopiedCodeId(null), 2000);
+  const apply = (message) => {
+    onApplyCodeToEditor?.(message.code, message.outLanguage);
+    setAppliedId(message.id);
+    setTimeout(() => setAppliedId(null), 1800);
   };
 
-  const handleApply = (code, id) => {
-    if (onApplyCodeToEditor) {
-      onApplyCodeToEditor(code);
-      setAppliedId(id);
-      setTimeout(() => setAppliedId(null), 2000);
-    }
+  const asFile = (message) => {
+    const fallbackExtension = { python: 'py', html: 'html', css: 'css', markdown: 'md', json: 'json', typescript: 'ts', javascript: 'js' }[message.outLanguage] || 'txt';
+    onCreateFileFromAi?.(message.fileName || `assistant.${fallbackExtension}`, message.code, message.outLanguage);
   };
 
-  const handleCreateFile = (code, suggestedName, lang) => {
-    const filename = suggestedName || `generated_${Date.now().toString(36).slice(-4)}.${lang === 'python' ? 'py' : lang === 'html' ? 'html' : lang === 'css' ? 'css' : 'js'}`;
-    if (onCreateFileFromAi) {
-      onCreateFileFromAi(filename, code, lang);
-    }
+  const applyOperations = (message) => {
+    const count = onApplyProjectOps?.(message.operations) ?? 0;
+    if (!count) return;
+    setAppliedId(message.id);
+    setMessages((prev) => prev.map((item) => (
+      item.id === message.id ? { ...item, applied: true } : item
+    )));
   };
+
+  const quick = mode === 'edit' ? QUICK_EDIT : QUICK_ANSWER;
 
   return (
-    <div className="flex flex-col h-full bg-[#0d1117] border border-white/[0.08] rounded-2xl shadow-2xl overflow-hidden animate-fade-in">
-      
-      {/* Header */}
-      <div className="bg-[#111620] px-4 py-3 border-b border-white/[0.08] flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/30">
-            <Sparkles className="w-4 h-4" />
-          </div>
+    <div className="ai-panel">
+      <div className="ai-head">
+        <div className="ai-title">
+          <span className="ai-mark"><Sparkles size={13} /></span>
           <div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs font-bold text-white tracking-wide">ANTIGRAVITY AI</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            </div>
-            <span className="text-[10px] text-slate-400 block -mt-0.5 truncate max-w-[170px]">
-              Active: {activeFilePath}
-            </span>
+            <strong>Assistant</strong>
+            <small>{activeFilePath ? `reading ${activeFilePath.split('/').pop()}` : 'no file open — general answers'}</small>
           </div>
         </div>
-
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => setMessages([messages[0]])}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors text-[11px] flex items-center gap-1"
-            title="Reset Chat"
+        <div className="ai-head-tools">
+          <span
+            className={`ai-engine ${isModel ? 'is-model' : ''}`}
+            title={isModel ? `Confirmed models: ${configuredModels.map((model) => model.label).join(', ')}` : 'Static analysis and a snippet library. Add a model key on the server for model answers.'}
           >
-            <RotateCcw className="w-3.5 h-3.5" />
+            <Cpu size={10} /> {isModel ? `${configuredModels.length} model${configuredModels.length === 1 ? '' : 's'}` : 'offline'}
+          </span>
+          <button type="button" className="ai-mini" onClick={() => setMessages([])} title="Clear the conversation" aria-label="Clear conversation">
+            <RotateCcw size={13} />
           </button>
           {onClose && (
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-colors"
-            >
-              <X className="w-4 h-4" />
+            <button type="button" className="ai-mini" onClick={onClose} aria-label="Close assistant">
+              <X size={14} />
             </button>
           )}
         </div>
       </div>
 
-      {/* Quick Prompt Action Pills */}
-      <div className="px-3 py-2 bg-indigo-500/[0.03] border-b border-white/[0.06] flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
-        {QUICK_PROMPTS.map((qp, idx) => (
+      <div className="ai-modes" role="tablist" aria-label="Assistant mode">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === 'answer'}
+          className={mode === 'answer' ? 'is-on' : ''}
+          onClick={() => setMode('answer')}
+        >
+          <MessageSquare size={12} /> Answer
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === 'edit'}
+          className={mode === 'edit' ? 'is-on' : ''}
+          onClick={() => setMode('edit')}
+        >
+          <PencilRuler size={12} /> Edit project
+        </button>
+      </div>
+
+      <label className="ai-model">
+        <Layers size={11} />
+        <select
+          value={modelId}
+          onChange={(event) => setModelId(event.target.value)}
+          aria-label="AI model"
+          title="Each free tier has its own key. Configured models are listed first."
+        >
+          {!models.length && <option value="">checking models…</option>}
+          {models.map((model) => (
+            <option key={model.id} value={model.id}>
+              {model.label}{model.free ? ' · free' : ''}{model.configured ? '' : ' · no key'}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      {models.length > 0 && selectedModel && !selectedModel.configured && (
+        <p className="ai-hint">
+          <AlertTriangle size={11} /> {selectedModel.keyEnv} is not set on the server, so another configured model answers.
+        </p>
+      )}
+
+      <div className="ai-pills">
+        {quick.map((item) => (
           <button
-            key={idx}
-            onClick={() => handleSendPrompt(qp.prompt, qp.action)}
-            disabled={isLoading}
-            className="shrink-0 px-2.5 py-1 rounded-lg bg-white/[0.03] hover:bg-indigo-600/20 hover:border-indigo-500/40 border border-white/[0.08] text-slate-300 hover:text-white text-[11px] font-medium transition-all"
+            key={item.label}
+            type="button"
+            className="ai-pill"
+            disabled={busy}
+            onClick={() => ask(item.prompt, item.action || 'chat')}
           >
-            {qp.label}
+            {item.label}
           </button>
         ))}
       </div>
 
-      {/* Chat Messages Feed */}
-      <div className="flex-1 p-3.5 overflow-y-auto space-y-3.5 min-h-[220px]">
-        {messages.map((msg) => {
-          const isUser = msg.sender === 'user';
+      <div className="ai-feed">
+        {messages.length === 0 && (
+          <div className="ai-empty">
+            <Bot size={22} />
+            <strong>{mode === 'edit' ? 'Describe the change, and it edits the room' : 'Ask about the code that is open'}</strong>
+            <span>
+              {mode === 'edit'
+                ? 'The whole project is sent to the model, and the files it rewrites are applied to this room for everyone — you confirm before anything changes.'
+                : isModel
+                  ? 'A model answers here, and it sees the file you are editing.'
+                  : 'Running offline: it reads your buffer for explanations, bug findings and safe rewrites, and hands back ready-made starters.'}
+            </span>
+          </div>
+        )}
 
-          return (
-            <div
-              key={msg.id}
-              className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} space-y-1`}
-            >
-              <div className="flex items-center gap-1.5 text-[10px] text-slate-400 px-1 font-medium">
-                {isUser ? (
-                  <>
-                    <span>You</span>
-                    <span>•</span>
-                    <span>{msg.timestamp}</span>
-                  </>
-                ) : (
-                  <>
-                    <Bot className="w-3 h-3 text-indigo-400" />
-                    <span className="font-bold text-indigo-300">Antigravity AI</span>
-                    <span>•</span>
-                    <span>{msg.timestamp}</span>
-                  </>
-                )}
-              </div>
-
-              {/* Message Bubble */}
-              <div
-                className={`p-3 rounded-2xl text-xs leading-relaxed max-w-[95%] shadow-md break-words ${
-                  isUser
-                    ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-br-none'
-                    : 'bg-[#121620] border border-white/[0.08] text-slate-200 rounded-bl-none'
-                }`}
-              >
-                <div className="whitespace-pre-wrap">{msg.text}</div>
-
-                {/* Generated Code Snippet Block */}
-                {msg.codeSnippet && (
-                  <div className="mt-2.5 pt-2.5 border-t border-white/[0.08]">
-                    <div className="bg-[#080b11] rounded-xl border border-white/[0.1] overflow-hidden">
-                      {/* Code Header Bar */}
-                      <div className="px-3 py-1.5 bg-[#0e121a] border-b border-white/[0.08] flex items-center justify-between">
-                        <span className="text-[10px] font-mono text-indigo-300 font-semibold">
-                          {msg.suggestedFileName || `${msg.suggestedLanguage || 'code'}`}
-                        </span>
-
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            onClick={() => handleCopyCode(msg.codeSnippet, msg.id)}
-                            className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 hover:text-white transition-colors"
-                            title="Copy code"
-                          >
-                            {copiedCodeId === msg.id ? (
-                              <>
-                                <Check className="w-3 h-3 text-emerald-400" />
-                                <span>Copied</span>
-                              </>
-                            ) : (
-                              <>
-                                <Copy className="w-3 h-3" />
-                                <span>Copy</span>
-                              </>
-                            )}
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Code Content */}
-                      <pre className="p-3 text-[11.5px] font-mono text-slate-200 overflow-x-auto max-h-[220px] leading-relaxed select-text">
-                        <code>{msg.codeSnippet}</code>
-                      </pre>
-
-                      {/* Action Buttons: Apply to Editor & Create File */}
-                      <div className="p-2 bg-[#0a0d14] border-t border-white/[0.06] flex items-center justify-between gap-2 flex-wrap">
-                        <button
-                          onClick={() => handleApply(msg.codeSnippet, msg.id)}
-                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[11px] shadow-sm shadow-indigo-600/30 transition-all cursor-pointer"
-                        >
-                          {appliedId === msg.id ? (
-                            <>
-                              <Check className="w-3.5 h-3.5 text-emerald-300" />
-                              <span>Applied to Editor!</span>
-                            </>
-                          ) : (
-                            <>
-                              <ArrowRight className="w-3.5 h-3.5" />
-                              <span>Apply to Current Editor</span>
-                            </>
-                          )}
-                        </button>
-
-                        <button
-                          onClick={() => handleCreateFile(msg.codeSnippet, msg.suggestedFileName, msg.suggestedLanguage)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-slate-200 border border-white/[0.1] text-[11px] font-semibold transition-all cursor-pointer"
-                          title="Save as new file in project"
-                        >
-                          <FilePlus className="w-3.5 h-3.5 text-indigo-400" />
-                          <span>Create File</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
+        {messages.map((message) => (
+          <div key={message.id} className={`ai-msg ${message.role === 'user' ? 'is-user' : ''}`}>
+            <div className="cp-meta">
+              {message.role === 'user' ? <b>You</b> : <><Bot size={11} style={{ color: 'var(--brand-text)' }} /><b>Assistant</b></>}
+              {message.engine && message.engine !== 'error' && <span>{message.engine === 'local' ? 'offline' : message.engine}</span>}
+              <span>{message.at}</span>
             </div>
-          );
-        })}
-        <div ref={messagesEndRef} />
+
+            <div className="ai-bubble">
+              <div className="ai-reply">{message.text}</div>
+
+              {message.explanation && <div className="ai-explain">{message.explanation}</div>}
+              {message.note && <div className="ai-note">{message.note}</div>}
+
+              {message.operations?.length > 0 && (
+                <div className="ai-ops">
+                  <div className="ai-ops-head">
+                    {message.operations.length} file{message.operations.length === 1 ? '' : 's'} to change
+                  </div>
+                  <ul>
+                    {message.operations.map((operation) => (
+                      <li key={`${operation.type}-${operation.path}`}>
+                        <span className={`ai-op-tag is-${operation.type}`}>{operation.type}</span>
+                        <code>{operation.path}</code>
+                      </li>
+                    ))}
+                  </ul>
+                  <button
+                    type="button"
+                    className={`ai-act ${message.applied ? 'is-done' : 'is-primary'}`}
+                    onClick={() => applyOperations(message)}
+                    disabled={message.applied}
+                  >
+                    {message.applied ? <><Check size={13} /> Applied to the room</> : <><ArrowRight size={13} /> Apply to room</>}
+                  </button>
+                </div>
+              )}
+
+              {message.code && (
+                <div className="ai-code">
+                  <div className="ai-code-head">
+                    <span className="ai-code-name">{message.fileName || `${message.outLanguage || 'code'}`}</span>
+                    <button type="button" className="ai-mini" onClick={() => copy(message.code, message.id)} aria-label="Copy code">
+                      {copiedId === message.id ? <Check size={13} style={{ color: 'var(--ok)' }} /> : <Copy size={13} />}
+                    </button>
+                  </div>
+                  <pre><code>{message.code}</code></pre>
+                  <div className="ai-code-actions">
+                    <button type="button" className={`ai-act ${appliedId === message.id ? 'is-done' : 'is-primary'}`} onClick={() => apply(message)} disabled={!activeFilePath}>
+                      {appliedId === message.id ? <><Check size={13} /> Replaced</> : <><ArrowRight size={13} /> Replace open file</>}
+                    </button>
+                    <button type="button" className="ai-act" onClick={() => asFile(message)}>
+                      <FilePlus size={13} /> New file
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+
+        {busy && (
+          <div className="ai-thinking">
+            <i /><i /><i />
+            <span style={{ marginLeft: 4 }}>{mode === 'edit' ? 'rewriting the project…' : 'reading your buffer…'}</span>
+          </div>
+        )}
+        <div ref={endRef} />
       </div>
 
-      {/* Input Bar */}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          handleSendPrompt();
-        }}
-        className="p-3 bg-[#111620] border-t border-white/[0.08] flex items-center gap-2"
-      >
+      <form className="ai-compose" onSubmit={(event) => { event.preventDefault(); ask(); }}>
         <input
-          ref={inputRef}
-          type="text"
-          value={inputText}
-          onChange={(e) => setInputText(e.target.value)}
-          placeholder="Ask AI to write, debug, or build anything..."
-          disabled={isLoading}
-          className="flex-1 bg-[#080b11] border border-white/[0.1] focus:border-indigo-500 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 outline-none transition-all"
+          className="ai-input"
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+          placeholder={mode === 'edit' ? 'e.g. add a pricing section to index.html' : activeFilePath ? 'Ask, debug or describe what to build' : 'Describe something to build'}
+          disabled={busy}
+          maxLength={4000}
+          aria-label="Message the assistant"
         />
-
-        <button
-          type="submit"
-          disabled={!inputText.trim() || isLoading}
-          className="p-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white rounded-xl transition-all shadow-md shadow-indigo-600/30 shrink-0"
-        >
-          {isLoading ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <Send className="w-4 h-4" />
-          )}
+        <button type="submit" className="ai-send" disabled={!canSend} aria-label="Send to assistant">
+          <Send size={14} />
         </button>
       </form>
-
     </div>
   );
 };

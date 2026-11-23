@@ -5,11 +5,13 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const { Server } = require('socket.io');
 const { connectDB } = require('./config/db');
+const { getPlatformStats } = require('./services/dataStore');
 const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const roomRoutes = require('./routes/roomRoutes');
 const fileSystemRoutes = require('./routes/fileSystemRoutes');
 const aiRoutes = require('./routes/aiRoutes');
+const userRoutes = require('./routes/userRoutes');
 const setupSocketHandlers = require('./socket/socketHandler');
 
 dotenv.config();
@@ -44,10 +46,17 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/fs', fileSystemRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/user', userRoutes);
 
 // Healthcheck Route
 app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'OK', message: 'Pro-Collab Server Running Smoothly' });
+});
+
+// Public platform stats for the landing page live counters
+app.get('/api/stats', async (req, res) => {
+  const stats = await getPlatformStats();
+  res.json({ ...stats, activeSockets: io.engine.clientsCount });
 });
 
 // Configure Socket.io

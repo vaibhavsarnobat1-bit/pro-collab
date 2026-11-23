@@ -29,4 +29,28 @@ const adminOnly = (req, res, next) => {
   }
 };
 
-module.exports = { protect, adminOnly, JWT_SECRET };
+// Attaches req.user when a valid token is present but never rejects the request,
+// for routes that behave better with an identity and still work without one.
+const optionalAuth = (req, res, next) => {
+  const header = req.headers.authorization;
+  if (header && header.startsWith('Bearer')) {
+    try {
+      req.user = jwt.verify(header.split(' ')[1], JWT_SECRET);
+    } catch {
+      /* an invalid token is simply treated as anonymous here */
+    }
+  }
+  next();
+};
+
+// Verify a raw JWT string the same way protect() does, for socket handshakes.
+const verifyToken = (token) => {
+  if (!token) return null;
+  try {
+    return jwt.verify(token, JWT_SECRET);
+  } catch {
+    return null;
+  }
+};
+
+module.exports = { protect, adminOnly, optionalAuth, verifyToken, JWT_SECRET };
