@@ -10,6 +10,7 @@ import { readFilesForRoom, pickFiles, downloadProjectZip } from '../lib/projectI
 import SharedEditor from '../components/SharedEditor';
 import FileExplorer from '../components/FileExplorer';
 import ChatPanel from '../components/ChatPanel';
+import ParticipantsPanel from '../components/ParticipantsPanel';
 import ActivityLogPanel from '../components/ActivityLogPanel';
 import VideoCallContainer from '../components/VideoCallContainer';
 import LivePreviewPanel from '../components/LivePreviewPanel';
@@ -132,6 +133,8 @@ const WorkspacePage = ({ guestMode = false }) => {
   const [logs, setLogs] = useState([]);
   const [messages, setMessages] = useState([]);
   const [privateMessages, setPrivateMessages] = useState([]);
+  const [typingUsers, setTypingUsers] = useState([]);
+  const [dmTarget, setDmTarget] = useState('');
   const [roomMeta, setRoomMeta] = useState(null);
   const [lockState, setLockState] = useState('checking');
   const [roomPassword, setRoomPassword] = useState('');
@@ -305,6 +308,18 @@ const WorkspacePage = ({ guestMode = false }) => {
     socket.on('receive-message', onMessage);
     socket.on('receive-private-message', onPrivate);
 
+    const onPeerTyping = ({ username }) => {
+      if (!username || username === identity?.username) return;
+      setTypingUsers((prev) => (prev.includes(username) ? prev : [...prev, username]));
+    };
+
+    const onPeerTypingStopped = ({ username }) => {
+      setTypingUsers((prev) => prev.filter((name) => name !== username));
+    };
+
+    socket.on('peer-typing', onPeerTyping);
+    socket.on('peer-typing-stopped', onPeerTypingStopped);
+
     return () => {
       socket.off('connect', onConnect);
       socket.off('disconnect', onDisconnect);
@@ -317,6 +332,8 @@ const WorkspacePage = ({ guestMode = false }) => {
       socket.off('language-updated', onLanguage);
       socket.off('receive-message', onMessage);
       socket.off('receive-private-message', onPrivate);
+      socket.off('peer-typing', onPeerTyping);
+      socket.off('peer-typing-stopped', onPeerTypingStopped);
     };
   }, [socket, roomId, identity, pushFeed, notify]);
 
@@ -628,6 +645,19 @@ const WorkspacePage = ({ guestMode = false }) => {
     socket?.emit('send-private-message', { roomId, recipientUsername, text });
   }, [socket, roomId]);
 
+  const handleTypingStart = useCallback(() => {
+    socket?.emit('typing-start', { roomId });
+  }, [socket, roomId]);
+
+  const handleTypingStop = useCallback(() => {
+    socket?.emit('typing-stop', { roomId });
+  }, [socket, roomId]);
+
+  const openDirectMessage = useCallback((username) => {
+    setRightPanel('chat');
+    setDmTarget(username);
+  }, []);
+
   /* ------------------------------------------------------- room link */
 
   const roomLink = useMemo(() => {
@@ -640,10 +670,31 @@ const WorkspacePage = ({ guestMode = false }) => {
       await navigator.clipboard.writeText(roomLink);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+      return true;
     } catch {
       notify('Clipboard access was refused — copy the address bar instead', { type: 'warn' });
+      return false;
     }
   };
+
+  // Hosts rename or re-describe their room from the People panel; the server
+  // owns the permission check, so a non-host just gets the 403 message back.
+  const handleUpdateRoom = useCallback(async (patch) => {
+    try {
+      const response = await api.patch(`/rooms/${encodeURIComponent(roomId)}`, patch);
+      const room = response.data?.room;
+      setRoomMeta((prev) => ({
+        ...(prev || { roomId }),
+        title: room?.title || prev?.title,
+        description: room?.description ?? prev?.description
+      }));
+      notify('Room details updated', { type: 'success' });
+      return true;
+    } catch (error) {
+      notify(error.response?.data?.message || 'Could not update the room', { type: 'error' });
+      return false;
+    }
+  }, [roomId, notify]);
 
   /* ------------------------------------------------- import / export */
 
@@ -906,10 +957,22 @@ const WorkspacePage = ({ guestMode = false }) => {
         </div>
 
         <div className="ws-top-right">
-          <div className="ws-chip is-static" title={otherPeople.length ? otherPeople.map((p) => p.username).join(', ') : 'You are alone here'}>
-            <Users size={13} />
-            {activeUsers.length || 1}
-          </div>
+          <button
+            type="button"
+            className={`ws-presence${rightPanel === 'people' ? ' is-on' : ''}`}
+            onClick={() => setRightPanel('people')}
+            title={otherPeople.length ? otherPeople.map((p) => p.username).join(', ') : 'You are alone here'}
+          >
+            <span className="ws-presence-stack">
+              {activeUsers.slice(0, 3).map((person) => (
+                <span key={person.socketId || person.username} className="ws-presence-avatar">
+                  {String(person.username || '?').slice(0, 1).toUpperCase()}
+                </span>
+              ))}
+              {activeUsers.length === 0 && <span className="ws-presence-avatar">?</span>}
+            </span>
+            <span className="ws-presence-count">{activeUsers.length || 1}</span>
+          </button>
           <button className="ws-chip" onClick={requestSaveToLibrary} disabled={!currentFile}>
             <Sparkles size={13} /> Snippet
           </button>
@@ -1037,6 +1100,10 @@ const WorkspacePage = ({ guestMode = false }) => {
             <button className={rightPanel === 'chat' ? 'is-on' : ''} onClick={() => setRightPanel('chat')}>
               <MessageSquare size={13} /> Chat
             </button>
+            <button className={rightPanel === 'people' ? 'is-on' : ''} onClick={() => setRightPanel('people')}>
+              <Users size={13} /> People
+              <span className="ws-rail-count">{activeUsers.length || 1}</span>
+            </button>
             <button className={rightPanel === 'ai' ? 'is-on' : ''} onClick={() => setRightPanel('ai')}>
               <Sparkles size={13} /> Assistant
             </button>
@@ -1056,6 +1123,26 @@ const WorkspacePage = ({ guestMode = false }) => {
                 onSendPrivateMessage={handleSendPrivateMessage}
                 currentUser={identity}
                 activeUsers={activeUsers}
+                typingUsers={typingUsers}
+                onTypingStart={handleTypingStart}
+                onTypingStop={handleTypingStop}
+                directTo={dmTarget}
+                onDirectConsumed={() => setDmTarget('')}
+              />
+            )}
+            {rightPanel === 'people' && (
+              <ParticipantsPanel
+                users={activeUsers}
+                currentUser={identity}
+                socketId={socket?.id}
+                roomMeta={roomMeta}
+                roomLink={roomLink}
+                onCopyLink={copyRoomLink}
+                onMessageUser={openDirectMessage}
+                typingUsers={typingUsers}
+                guestMode={guestMode}
+                onUpdateRoom={handleUpdateRoom}
+                canEdit={Boolean(identity?.id && roomMeta?.createdBy?.id && String(identity.id) === String(roomMeta.createdBy.id)) || isAdmin}
               />
             )}
             {rightPanel === 'ai' && (

@@ -3,9 +3,7 @@
    These sit flush inside .ws-rail, so no outer card of their own.
    ═══════════════════════════════════════════════════════════ */
 
-.cp-panel,
-.ai-panel,
-.al-panel {
+.ai-panel, .al-panel {
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -15,9 +13,7 @@
 }
 
 /* Shared panel head */
-.cp-head,
-.ai-head,
-.al-head {
+.ai-head, .al-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -28,26 +24,20 @@
   background: var(--surface-2);
 }
 
-.cp-title,
-.ai-title,
-.al-title {
+.ai-title, .al-title {
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
 }
 
-.cp-title strong,
-.ai-title strong,
-.al-title strong {
+.ai-title strong, .al-title strong {
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.02em;
 }
 
-.cp-title small,
-.ai-title small,
-.al-title small {
+.ai-title small, .al-title small {
   display: block;
   font-family: 'Fira Code', ui-monospace, monospace;
   font-size: 10px;
@@ -58,9 +48,7 @@
   max-width: 19ch;
 }
 
-.cp-mark,
-.ai-mark,
-.al-mark {
+.ai-mark, .al-mark {
   display: grid;
   place-items: center;
   width: 26px;
@@ -80,7 +68,6 @@
 
 /* ───────────────────────────────────────────── small round actions */
 
-.cp-mini,
 .ai-mini {
   display: grid;
   place-items: center;
@@ -94,94 +81,15 @@
   transition: color 0.15s, background 0.15s, border-color 0.15s;
 }
 
-.cp-mini:hover,
 .ai-mini:hover {
   color: var(--ink);
   background: var(--brand-soft);
   border-color: var(--brand-line);
 }
 
-.cp-mini.is-on {
-  color: var(--brand-text);
-  background: var(--brand-soft);
-  border-color: var(--brand-line);
-}
-
-/* ───────────────────────────────────────────── mode switch */
-
-.cp-modes {
-  display: flex;
-  gap: 2px;
-  padding: 2px;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: var(--surface-3);
-}
-
-.cp-modes button {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 9px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--ink-faint);
-  font-size: 11px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 0.16s, color 0.16s;
-}
-
-.cp-modes button.is-on {
-  background: var(--brand);
-  color: #fff;
-}
-
-.cp-modes button.is-dm.is-on {
-  background: var(--violet);
-  color: var(--bg);
-}
-
-.cp-peer-select {
-  height: 26px;
-  max-width: 130px;
-  padding: 0 6px;
-  border-radius: 7px;
-  border: 1px solid var(--violet);
-  background: var(--input-bg);
-  color: var(--ink);
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.cp-peer-select option {
-  background: var(--surface-solid);
-}
-
-.cp-dm-note {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 5px 11px;
-  border-bottom: 1px solid var(--line);
-  background: rgba(153,153,153,0.1);
-  color: var(--violet);
-  font-size: 10.5px;
-  font-weight: 600;
-}
-
-.cp-dm-note strong {
-  color: var(--ink);
-}
-
 /* ───────────────────────────────────────────── message feed */
 
-.cp-feed,
-.ai-feed,
-.al-feed {
+.ai-feed, .al-feed {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -191,9 +99,7 @@
   gap: 9px;
 }
 
-.cp-empty,
-.ai-empty,
-.al-empty {
+.ai-empty, .al-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -206,107 +112,15 @@
   padding: 24px 12px;
 }
 
-.cp-empty svg,
-.ai-empty svg,
-.al-empty svg {
+.ai-empty svg, .al-empty svg {
   opacity: 0.4;
 }
 
-.cp-empty strong,
 .al-empty strong {
   color: var(--ink-soft);
   font-size: 12px;
 }
 
-.cp-row {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.cp-row.is-me {
-  align-items: flex-end;
-}
-
-.cp-meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 3px;
-  font-family: 'Fira Code', ui-monospace, monospace;
-  font-size: 9.5px;
-  color: var(--ink-faint);
-}
-
-.cp-meta b {
-  color: var(--ink-soft);
-  font-weight: 700;
-}
-
-.cp-tag-dm {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  color: var(--violet);
-  font-weight: 700;
-}
-
-.cp-bubble {
-  max-width: 88%;
-  padding: 7px 10px;
-  border-radius: 11px;
-  font-size: 12px;
-  line-height: 1.5;
-  word-break: break-word;
-  white-space: pre-wrap;
-  background: var(--surface-3);
-  border: 1px solid var(--line);
-  border-bottom-left-radius: 4px;
-  color: var(--ink);
-}
-
-.cp-row.is-me .cp-bubble {
-  background: var(--brand);
-  border-color: transparent;
-  color: #fff;
-  border-bottom-left-radius: 11px;
-  border-bottom-right-radius: 4px;
-}
-
-.cp-row.is-dm .cp-bubble {
-  border-color: var(--violet);
-}
-
-.cp-row.is-me.is-dm .cp-bubble {
-  background: linear-gradient(120deg, var(--brand), var(--violet));
-}
-
-/* ───────────────────────────────────────────── composer */
-
-.cp-emoji {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 3px;
-  padding: 7px 11px;
-  border-top: 1px solid var(--line);
-  background: var(--surface-2);
-}
-
-.cp-emoji button {
-  padding: 5px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  font-size: 15px;
-  cursor: pointer;
-  transition: background 0.14s;
-}
-
-.cp-emoji button:hover {
-  background: var(--brand-soft);
-}
-
-.cp-compose,
 .ai-compose {
   display: flex;
   align-items: center;
@@ -317,7 +131,6 @@
   background: var(--surface-2);
 }
 
-.cp-input,
 .ai-input {
   flex: 1;
   min-width: 0;
@@ -330,14 +143,12 @@
   font-size: 12px;
 }
 
-.cp-input:focus,
 .ai-input:focus {
   outline: none;
   border-color: var(--brand);
   box-shadow: 0 0 0 3px var(--brand-soft);
 }
 
-.cp-send,
 .ai-send {
   display: grid;
   place-items: center;
@@ -352,18 +163,15 @@
   transition: filter 0.16s, transform 0.1s;
 }
 
-.cp-send:hover:not(:disabled),
 .ai-send:hover:not(:disabled) {
   filter: brightness(1.1);
 }
 
-.cp-send:disabled,
 .ai-send:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
 
-.cp-send:active:not(:disabled),
 .ai-send:active:not(:disabled) {
   transform: scale(0.94);
 }

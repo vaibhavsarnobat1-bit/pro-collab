@@ -7,6 +7,7 @@ const {
   deleteRoomFile,
   renameRoomFile,
   verifyRoomAccess,
+  getRoomMeta,
   touchRoom,
   bindPresenceMap
 } = require('../services/dataStore');
@@ -62,11 +63,21 @@ const setupSocketHandlers = (io, app) => {
       const roomData = activeRoomsMap.get(roomId);
 
       if (!roomData.users.some((u) => u.socketId === socket.id)) {
+        const meta = await getRoomMeta(roomId);
+        const isCreator = Boolean(
+          meta?.createdBy?.username && meta.createdBy.username === identity().username
+        );
+        // A room always shows one host: the person who created it, or the first
+        // person in when the room was opened by link.
+        const hostPresent = roomData.users.some((u) => u.isHost);
+
         roomData.users.push({
           socketId: socket.id,
           username: identity().username,
           userId: currentUser.id || null,
-          role: currentUser.role || 'user'
+          role: currentUser.role || 'user',
+          joinedAt: new Date().toISOString(),
+          isHost: isCreator || !hostPresent
         });
       }
 
@@ -216,6 +227,25 @@ const setupSocketHandlers = (io, app) => {
       socket.to(roomId).emit('peer-ran-preview', { filePath, username: currentUser.username });
     });
 
+    // Typing indicators. Relay only — nothing is stored, so a stuck flag can
+    // never outlive the keystroke that produced it.
+    socket.on('typing-start', ({ roomId, scope = 'room' } = {}) => {
+      if (!roomId || !currentUser) return;
+      socket.to(roomId).emit('peer-typing', {
+        socketId: socket.id,
+        username: currentUser.username,
+        scope
+      });
+    });
+
+    socket.on('typing-stop', ({ roomId } = {}) => {
+      if (!roomId || !currentUser) return;
+      socket.to(roomId).emit('peer-typing-stopped', {
+        socketId: socket.id,
+        username: currentUser.username
+      });
+    });
+
     // Chat Message Handler
     socket.on('send-message', async ({ roomId, text }, ack) => {
       if (!roomId || !text || !currentUser) return ack?.({ ok: false });
@@ -225,6 +255,7 @@ const setupSocketHandlers = (io, app) => {
         sender: currentUser.username,
         text: String(text).slice(0, 4000),
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        at: Date.now(),
         socketId: socket.id
       };
 
@@ -252,6 +283,7 @@ const setupSocketHandlers = (io, app) => {
         text: String(text).slice(0, 4000),
         isPrivate: true,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        at: Date.now(),
         socketId: socket.id
       };
 
@@ -373,6 +405,10 @@ async function removeFromPresence(io, activeRoomsMap, activeCallsMap, roomId, so
     if (roomData.users.length === 0) {
       activeRoomsMap.delete(roomId);
     } else {
+      // Keep exactly one host in the room after the previous one leaves.
+      if (!roomData.users.some((u) => u.isHost)) {
+        roomData.users[0].isHost = true;
+      }
       io.to(roomId).emit('room-users-updated', roomData.users);
     }
   }

@@ -201,6 +201,192 @@ their name. Open the preview panel to run index.html, styles.css and app.js.
   }
 });
 
+// Starter projects a room can be created from. `blank` keeps the classic
+// runnable demo; the others give a new room something real to edit.
+const TEMPLATES = { blank: true, landing: true, react: true, node: true };
+
+const buildTemplateFiles = (template, roomId) => {
+  if (template === 'landing') {
+    return {
+      'index.html': {
+        name: 'index.html',
+        path: 'index.html',
+        language: 'html',
+        content: `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${roomId}</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="nav">
+      <span class="brand">${roomId}</span>
+      <nav><a href="#work">Work</a><a href="#contact">Contact</a></nav>
+    </header>
+    <main>
+      <section class="hero">
+        <p class="eyebrow">New project</p>
+        <h1>Build something worth shipping.</h1>
+        <p class="lede">Edit the files on the left — everyone in this room sees the change instantly.</p>
+        <a class="btn" href="#work">Get started</a>
+      </section>
+    </main>
+    <footer id="contact">
+      <span>© ${new Date().getFullYear()} ${roomId}</span>
+    </footer>
+  </body>
+</html>
+`
+      },
+      'styles.css': {
+        name: 'styles.css',
+        path: 'styles.css',
+        language: 'css',
+        content: `:root { --ink: #0d0d0f; --paper: #faf9f7; --line: #e3e0da; --accent: #1d4ed8; }
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  line-height: 1.6;
+}
+.nav {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20px 32px; border-bottom: 1px solid var(--line);
+}
+.brand { font-weight: 700; letter-spacing: -0.01em; }
+.nav nav a { margin-left: 22px; color: #55524d; text-decoration: none; font-size: 14px; }
+.nav nav a:hover { color: var(--ink); }
+.hero { max-width: 680px; margin: 0 auto; padding: 96px 32px; }
+.eyebrow { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+h1 { font-size: clamp(32px, 6vw, 52px); line-height: 1.08; letter-spacing: -0.03em; margin: 12px 0 16px; }
+.lede { color: #55524d; max-width: 46ch; }
+.btn {
+  display: inline-block; margin-top: 20px; padding: 12px 22px;
+  border-radius: 8px; background: var(--ink); color: #fff;
+  text-decoration: none; font-size: 14px; font-weight: 600;
+}
+footer { padding: 28px 32px; border-top: 1px solid var(--line); color: #7a766f; font-size: 13px; }
+`
+      }
+    };
+  }
+
+  if (template === 'react') {
+    return {
+      'src/App.jsx': {
+        name: 'App.jsx',
+        path: 'src/App.jsx',
+        language: 'javascript',
+        content: `import { useState } from 'react';
+
+export default function App() {
+  const [count, setCount] = useState(0);
+
+  return (
+    <main style={{ fontFamily: 'system-ui', padding: 40 }}>
+      <h1>Hello from ${roomId}</h1>
+      <button onClick={() => setCount(count + 1)}>Clicked {count} times</button>
+    </main>
+  );
+}
+`
+      },
+      'src/main.jsx': {
+        name: 'main.jsx',
+        path: 'src/main.jsx',
+        language: 'javascript',
+        content: `import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App.jsx';
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+`
+      },
+      'index.html': {
+        name: 'index.html',
+        path: 'index.html',
+        language: 'html',
+        content: `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>${roomId}</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
+`
+      },
+      'package.json': {
+        name: 'package.json',
+        path: 'package.json',
+        language: 'json',
+        content: `{
+  "name": "${roomId}",
+  "private": true,
+  "type": "module",
+  "scripts": { "dev": "vite" },
+  "dependencies": { "react": "^18.3.1", "react-dom": "^18.3.1" },
+  "devDependencies": { "vite": "^5.2.11" }
+}
+`
+      }
+    };
+  }
+
+  if (template === 'node') {
+    return {
+      'server.js': {
+        name: 'server.js',
+        path: 'server.js',
+        language: 'javascript',
+        content: `const http = require('http');
+
+const port = process.env.PORT || 3000;
+
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ ok: true, service: '${roomId}' }));
+});
+
+server.listen(port, () => console.log('listening on :' + port));
+`
+      },
+      'package.json': {
+        name: 'package.json',
+        path: 'package.json',
+        language: 'json',
+        content: `{
+  "name": "${roomId}",
+  "private": true,
+  "main": "server.js",
+  "scripts": { "start": "node server.js" }
+}
+`
+      },
+      'README.md': {
+        name: 'README.md',
+        path: 'README.md',
+        language: 'markdown',
+        content: `# ${roomId}
+
+Minimal Node service scaffolded from the room template.
+
+    npm start
+`
+      }
+    };
+  }
+
+  return getDefaultRoomFiles(roomId);
+};
+
 const getOrCreateRoom = async (roomId) => {
   const defaultFiles = getDefaultRoomFiles(roomId);
 
@@ -322,7 +508,7 @@ const generateRoomId = () => {
 // room name, so it is restricted to a conservative alphabet.
 const ROOM_ID_RE = /^[a-z0-9][a-z0-9_-]{2,39}$/i;
 
-const createRoom = async ({ roomId: wantedId = '', title, isPrivate = false, password = '', createdBy = null }) => {
+const createRoom = async ({ roomId: wantedId = '', title, description = '', template = 'blank', isPrivate = false, password = '', createdBy = null }) => {
   const requested = String(wantedId || '').trim();
 
   if (requested && !ROOM_ID_RE.test(requested)) {
@@ -346,6 +532,8 @@ const createRoom = async ({ roomId: wantedId = '', title, isPrivate = false, pas
   const record = {
     roomId,
     title: String(title || `Room ${roomId}`).slice(0, 80),
+    description: String(description || '').replace(/\s+/g, ' ').trim().slice(0, 200),
+    template: TEMPLATES[template] ? template : 'blank',
     isPrivate: !!isPrivate,
     hasPassword: false,
     passwordHash: null,
@@ -360,7 +548,12 @@ const createRoom = async ({ roomId: wantedId = '', title, isPrivate = false, pas
   }
 
   memoryStore.roomRegistry[roomId] = record;
-  await getOrCreateRoom(roomId);
+  const seeded = await getOrCreateRoom(roomId);
+  seeded.title = record.title;
+  if (record.template !== 'blank') {
+    seeded.files = buildTemplateFiles(record.template, roomId);
+    seeded.activeFile = Object.keys(seeded.files)[0] || 'index.html';
+  }
 
   if (getDbStatus()) {
     try {
@@ -384,6 +577,8 @@ const createRoom = async ({ roomId: wantedId = '', title, isPrivate = false, pas
 const publicRoomView = (record) => ({
   roomId: record.roomId,
   title: record.title,
+  description: record.description || '',
+  template: record.template || 'blank',
   isPrivate: record.isPrivate,
   hasPassword: record.hasPassword,
   createdBy: record.createdBy,
@@ -679,6 +874,37 @@ const getPlatformStats = async () => {
   };
 };
 
+// Renaming or re-describing a room after the fact. Only the creator (or an
+// admin) may do it, so a visitor cannot rewrite someone else's room listing.
+const updateRoomMeta = async (roomId, { title, description } = {}) => {
+  const record = memoryStore.roomRegistry[roomId];
+  if (!record) {
+    const err = new Error('That room does not exist');
+    err.code = 'room_not_found';
+    throw err;
+  }
+
+  if (title !== undefined) record.title = String(title).trim().slice(0, 80) || record.title;
+  if (description !== undefined) {
+    record.description = String(description).replace(/\s+/g, ' ').trim().slice(0, 200);
+  }
+  record.updatedAt = new Date();
+
+  if (getDbStatus()) {
+    try {
+      await Room.findOneAndUpdate(
+        { roomId },
+        { title: record.title, description: record.description },
+        { upsert: false }
+      );
+    } catch (e) {
+      console.error('Mongo update room meta error:', e);
+    }
+  }
+
+  return publicRoomView(record);
+};
+
 module.exports = {
   findUserByUsername,
   createUser,
@@ -693,6 +919,7 @@ module.exports = {
   getRoomMeta,
   verifyRoomAccess,
   listPublicRooms,
+  updateRoomMeta,
   touchRoom,
   generateRoomId,
   bindPresenceMap,

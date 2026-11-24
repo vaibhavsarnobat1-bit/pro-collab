@@ -7,6 +7,7 @@ const {
   getChatMessages,
   createRoom,
   listPublicRooms,
+  updateRoomMeta,
   verifyRoomAccess,
   getRoomMeta
 } = require('../services/dataStore');
@@ -24,7 +25,14 @@ router.get('/', async (req, res) => {
 // POST /api/rooms — create a room, optionally with your own code and password
 router.post('/', optionalAuth, async (req, res) => {
   try {
-    const { roomId = '', title = '', isPrivate = false, password = '' } = req.body || {};
+    const {
+      roomId = '',
+      title = '',
+      description = '',
+      template = 'blank',
+      isPrivate = false,
+      password = ''
+    } = req.body || {};
 
     if (isPrivate && String(password).trim().length < 4) {
       return res.status(400).json({ message: 'A locked room needs a password of at least 4 characters' });
@@ -33,6 +41,8 @@ router.post('/', optionalAuth, async (req, res) => {
     const room = await createRoom({
       roomId,
       title,
+      description,
+      template,
       isPrivate: !!isPrivate,
       password,
       createdBy: req.user ? { id: req.user.id, username: req.user.username } : null
@@ -89,13 +99,54 @@ router.get('/:roomId', async (req, res) => {
 
     res.json({
       room,
-      meta: meta ? { roomId, title: meta.title, isPrivate: meta.isPrivate, createdBy: meta.createdBy } : null,
+      meta: {
+        roomId,
+        title: meta ? meta.title : roomId,
+        description: meta?.description || '',
+        template: meta?.template || 'blank',
+        isPrivate: Boolean(meta?.isPrivate),
+        hasPassword: Boolean(meta?.hasPassword),
+        createdBy: meta?.createdBy || null,
+        createdAt: meta?.createdAt || null
+      },
       logs,
       messages
     });
   } catch (error) {
     console.error('Fetch Room Error:', error);
     res.status(500).json({ message: 'Failed to load room data' });
+  }
+});
+
+// PATCH /api/rooms/:roomId — rename or re-describe a room. The creator and
+// admins only; everyone else edits files, not the room's identity.
+router.patch('/:roomId', optionalAuth, async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    const meta = await getRoomMeta(roomId);
+
+    if (!meta) return res.status(404).json({ message: 'That room does not exist' });
+
+    const requester = req.user || null;
+    const owner = meta.createdBy?.id ? String(meta.createdBy.id) : null;
+    const isOwner = requester && owner && String(requester.id) === owner;
+    const isAdmin = requester?.role === 'admin';
+
+    if (owner && !isOwner && !isAdmin) {
+      return res.status(403).json({ message: 'Only the room creator can change these details' });
+    }
+
+    const { title, description } = req.body || {};
+    const room = await updateRoomMeta(roomId, {
+      title: title === undefined ? undefined : String(title).slice(0, 80),
+      description: description === undefined ? undefined : String(description).slice(0, 200)
+    });
+
+    res.json({ room });
+  } catch (error) {
+    if (error.code === 'room_not_found') return res.status(404).json({ message: error.message });
+    console.error('Update room error:', error);
+    res.status(500).json({ message: 'Could not update the room' });
   }
 });
 
