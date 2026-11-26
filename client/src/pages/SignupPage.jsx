@@ -1,25 +1,10 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import ScrambleText from '../components/ScrambleText';
-import '../styles/auth.css';
-import {
-  Code2, Eye, EyeOff, AlertCircle, CheckCircle2, ArrowLeft, Shield, Video,
-  Users, Sun, Moon, Check, Sparkles, Github
-} from 'lucide-react';
-
-const strengthOf = (pw) => {
-  if (!pw) return { score: 0, label: 'At least 6 characters' };
-  let score = 0;
-  if (pw.length >= 6) score += 1;
-  if (pw.length >= 10) score += 1;
-  if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) score += 1;
-  if (/\d/.test(pw) && /[^A-Za-z0-9]/.test(pw)) score += 1;
-  if (score === 0) score = 1;
-  const labels = ['', 'weak — add length and variety', 'acceptable', 'solid', 'strong: mixed case, digits, symbols'];
-  return { score, label: labels[score] };
-};
+import { Eye, EyeOff, AlertCircle, ArrowLeft, Sun, Moon } from 'lucide-react';
+import InteractiveGrid from '../components/landing/InteractiveGrid';
+import BrandLogo from '../components/landing/BrandLogo';
 
 const SignupPage = () => {
   const [username, setUsername] = useState('');
@@ -29,7 +14,6 @@ const SignupPage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [agree, setAgree] = useState(true);
 
   const { signup, user } = useAuth();
   const { theme, toggleTheme } = useTheme();
@@ -38,9 +22,6 @@ const SignupPage = () => {
   useEffect(() => {
     if (user) navigate(user.role === 'admin' ? '/admin-dashboard' : '/workspace', { replace: true });
   }, [user, navigate]);
-
-  const { score, label } = useMemo(() => strengthOf(password), [password]);
-  const passwordsMatch = !!password && !!confirmPassword && password === confirmPassword;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -62,10 +43,6 @@ const SignupPage = () => {
       setError('Password must be at least 6 characters long.');
       return;
     }
-    if (!agree) {
-      setError('Please accept the sharing notice to continue.');
-      return;
-    }
 
     setIsSubmitting(true);
     const result = await signup(username.trim(), password, confirmPassword);
@@ -76,121 +53,144 @@ const SignupPage = () => {
   };
 
   return (
-    <div className="au-screen">
-      <div className="au-grid" aria-hidden="true" />
+    <div className="lp-page" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, position: 'relative', overflow: 'hidden' }}>
+      <InteractiveGrid />
+      <div
+        className="lp-orange-glow"
+        aria-hidden="true"
+        style={{
+          position: 'fixed',
+          width: 860,
+          height: 640,
+          top: '50%',
+          left: '50%',
+          marginLeft: -430,
+          marginTop: -320,
+          zIndex: 0,
+          opacity: 1,
+        }}
+      />
 
-      <div className="au-topbar">
-        <Link to="/" className="au-pill"><ArrowLeft size={15} /> Home</Link>
-        <button className="au-pill" onClick={toggleTheme} aria-label="Toggle colour scheme">
-          {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
-          <span>{theme === 'dark' ? 'Light' : 'Dark'}</span>
-        </button>
-      </div>
+      <div style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: 420, animation: 'lp-auth-in .6s cubic-bezier(.22,1,.36,1) both' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <Link to="/" className="lp-btn lp-btn-ghost" style={{ textDecoration: 'none', padding: '8px 12px' }}>
+            <ArrowLeft size={16} /> Home
+          </Link>
+          <button type="button" onClick={toggleTheme} className="lp-btn lp-btn-ghost lp-round" aria-label="Toggle theme" style={{ width: 36, height: 36, padding: 0 }}>
+            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
+        </div>
 
-      <div className="au-shell">
-        <aside className="au-left">
-          <div className="au-brand">
-            <span className="au-logo"><Code2 size={18} /></span>
-            <span className="au-wordmark">ProCollab</span>
-          </div>
-
-          <h2 className="au-left-title">
-            <ScrambleText text="Your room," delay={100} /><br />your keyboard.
-          </h2>
-          <p className="au-left-sub">
-            One account unlocks shared Monaco buffers, multi-cursor presence, WebRTC calls and a snippet library that travels with you.
-          </p>
-
-          <div className="au-points">
-            <div className="au-point"><Sparkles size={15} /><div><strong>Free and open</strong><span>No cards, no seat limits, self-hostable.</span></div></div>
-            <div className="au-point"><Video size={15} /><div><strong>Rooms with video</strong><span>Peer-to-peer calls and screen share built in.</span></div></div>
-            <div className="au-point"><Users size={15} /><div><strong>Private DMs</strong><span>Message one teammate without leaving the editor.</span></div></div>
-          </div>
-
-          <div className="au-terminal">
-            <div className="au-term-head"><span className="au-dots"><i /><i /><i /></span><span>signup</span></div>
-            <div className="au-term-body">
-              <p><span className="au-prompt">$</span> pro-collab account create --free</p>
-              <p className="au-out">✓ username reserved</p>
-              <p className="au-out">✓ workspace provisioned</p>
-              <p className="au-cur">▍</p>
+        <div className="lp-depth lp-surface lp-sq" style={{ padding: '34px 30px' }}>
+          <div style={{ textAlign: 'center', marginBottom: 26 }}>
+            <div style={{ display: 'inline-flex', justifyContent: 'center', marginBottom: 14 }}>
+              <BrandLogo size={36} />
             </div>
-          </div>
-        </aside>
-
-        <section className="au-right">
-          <div className="au-card-head">
-            <h1>Create account</h1>
-            <p>Two fields and you are in — no email verification in local mode.</p>
+            <h1 style={{ margin: 0, fontSize: 28, fontWeight: 600, letterSpacing: '-0.03em', color: 'var(--lp-fg)' }}>Create account</h1>
+            <p style={{ color: 'var(--lp-muted)', marginTop: 6, fontSize: 14 }}>Get started with Pro-Collab.</p>
           </div>
 
-          {error && <div className="au-err" role="alert"><AlertCircle size={14} /> {error}</div>}
+          {error && (
+            <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#ef4444', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 12, padding: '10px 12px', marginBottom: 16, fontSize: 13.5 }}>
+              <AlertCircle size={15} /> {error}
+            </div>
+          )}
 
-          <form onSubmit={handleSubmit} className="au-form" noValidate>
-            <label className={`au-field ${username && username.trim().length < 3 ? 'au-bad' : ''}`}>
-              <span>username</span>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+              <span style={{ fontSize: 13, color: 'var(--lp-muted)', fontWeight: 500 }}>Username</span>
               <input
-                type="text" value={username} autoComplete="username" autoFocus
-                onChange={(e) => setUsername(e.target.value)} placeholder="e.g. vaibh"
+                className="lp-input lp-auth-input"
+                type="text"
+                value={username}
+                autoComplete="username"
+                autoFocus
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="e.g. vaibh"
               />
             </label>
 
-            <label className="au-field">
-              <span>password</span>
-              <div className="au-pass">
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+              <span style={{ fontSize: 13, color: 'var(--lp-muted)', fontWeight: 500 }}>Password</span>
+              <div style={{ position: 'relative' }}>
                 <input
-                  type={showPassword ? 'text' : 'password'} value={password} autoComplete="new-password"
-                  onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters"
+                  className="lp-input lp-auth-input"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  autoComplete="new-password"
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="At least 6 characters"
+                  style={{ paddingRight: 40 }}
                 />
-                <button type="button" onClick={() => setShowPassword((v) => !v)} aria-label={showPassword ? 'Hide password' : 'Show password'}>
-                  {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                </button>
-              </div>
-              <div className={`au-meter au-meter-${score}`} aria-hidden="true">
-                <i /><i /><i /><i />
-              </div>
-              <div className="au-meter-label">{label}</div>
-            </label>
-
-            <label className={`au-field ${confirmPassword && !passwordsMatch ? 'au-bad' : ''}`}>
-              <span className="au-field-row">
-                <span>confirm password</span>
-                {passwordsMatch && <span className="au-match"><CheckCircle2 size={12} /> match</span>}
-              </span>
-              <div className="au-pass">
-                <input
-                  type={showConfirmPassword ? 'text' : 'password'} value={confirmPassword} autoComplete="new-password"
-                  onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Re-enter password"
-                />
-                <button type="button" onClick={() => setShowConfirmPassword((v) => !v)} aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}>
-                  {showConfirmPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--lp-muted)' }}
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
             </label>
 
-            <button type="button" className={`au-remember ${agree ? 'au-on' : ''}`} onClick={() => setAgree((v) => !v)}>
-              <span className="au-check"><Check size={11} /></span> I understand anyone with a room link can edit it
-            </button>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+              <span style={{ fontSize: 13, color: 'var(--lp-muted)', fontWeight: 500 }}>Confirm password</span>
+              <div style={{ position: 'relative' }}>
+                <input
+                  className="lp-input lp-auth-input"
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  value={confirmPassword}
+                  autoComplete="new-password"
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Re-enter password"
+                  style={{ paddingRight: 40 }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword((v) => !v)}
+                  aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                  style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--lp-muted)' }}
+                >
+                  {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </label>
 
-            <button type="submit" className="au-submit" disabled={isSubmitting} id="signup-submit-btn">
-              {isSubmitting ? <span className="au-spin" /> : 'Create free account'}
+            <button
+              type="submit"
+              className="lp-btn"
+              disabled={isSubmitting}
+              style={{
+                width: '100%',
+                marginTop: 4,
+                padding: '13px 18px',
+                fontSize: 15,
+                fontWeight: 600,
+                background: 'linear-gradient(135deg, #ff7a45, #f97316)',
+                color: '#ffffff',
+                boxShadow: '0 10px 26px -10px rgba(255, 122, 69, 0.7)',
+              }}
+            >
+              {isSubmitting ? 'Creating…' : 'Create account'}
             </button>
           </form>
 
-
-          <div className="au-good-wrap">
-            {passwordsMatch && score >= 2 && (
-              <div className="au-good"><CheckCircle2 size={14} /> Credentials look good — press create to enter the workspace.</div>
-            )}
-          </div>
-
-          <p className="au-foot">
-            Already onboard? <Link to="/login">Sign in</Link> · your data stays on this server <Shield size={11} style={{ display: 'inline', verticalAlign: '-1px' }} />
+          <p style={{ textAlign: 'center', marginTop: 20, marginBottom: 0, fontSize: 14, color: 'var(--lp-muted)' }}>
+            Already have an account? <Link to="/login" style={{ color: '#ff7a45', textDecoration: 'none', fontWeight: 600 }}>Sign in</Link>
           </p>
-
-          <div className="au-trust"><Github size={12} /> Open source — deploy ProCollab on your own infrastructure.</div>
-        </section>
+        </div>
       </div>
+
+      <style>{`
+        @keyframes lp-auth-in {
+          from { opacity: 0; transform: translateY(18px) scale(0.98); }
+          to { opacity: 1; transform: none; }
+        }
+        .lp-auth-input:focus {
+          outline: 2px solid #ff7a45 !important;
+          outline-offset: 2px;
+        }
+      `}</style>
     </div>
   );
 };

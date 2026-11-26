@@ -55,8 +55,8 @@ const Navbar = () => {
     navigate('/login');
   };
 
-  // Hide the navbar on login and signup pages (they have their own brand header)
-  if (location.pathname === '/login' || location.pathname === '/signup') {
+  // Hide the navbar on landing, login, and signup pages (they have their own header)
+  if (location.pathname === '/' || location.pathname === '/login' || location.pathname === '/signup') {
     return null;
   }
 
@@ -283,7 +283,7 @@ const Navbar = () => {
           border-radius: 10px;
           background: linear-gradient(135deg, var(--brand), var(--violet) 60%, var(--cyan));
           display: flex; align-items: center; justify-content: center;
-          color: #fff;
+          color: var(--brand-ink);
           box-shadow: 0 6px 18px -6px var(--glow);
           flex-shrink: 0;
           transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -317,7 +317,7 @@ const Navbar = () => {
         .hb-btn-primary {
           display: flex; align-items: center; gap: 6px;
           background: var(--brand);
-          color: #fff;
+          color: var(--brand-ink);
           border: none;
           font-size: 13px; font-weight: 700;
           padding: 8px 16px;
@@ -372,7 +372,7 @@ const Navbar = () => {
           min-width: 16px; height: 16px;
           border-radius: 999px;
           background: var(--bad);
-          color: #fff;
+          color: var(--brand-ink);
           font-size: 9.5px; font-weight: 800;
           display: flex; align-items: center; justify-content: center;
           padding: 0 4px;
@@ -396,7 +396,7 @@ const Navbar = () => {
           border-radius: 50%;
           background: linear-gradient(135deg, var(--brand), var(--violet));
           display: flex; align-items: center; justify-content: center;
-          font-size: 11px; font-weight: 800; color: #fff;
+          font-size: 11px; font-weight: 800; color: var(--brand-ink);
           flex-shrink: 0;
         }
 

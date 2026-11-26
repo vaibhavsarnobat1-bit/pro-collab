@@ -59,6 +59,16 @@ app.get('/api/stats', async (req, res) => {
   res.json({ ...stats, activeSockets: io.engine.clientsCount });
 });
 
+// Demo email capture for the landing page's final CTA.
+app.post('/api/subscribe', (req, res) => {
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim() : '';
+  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    return res.status(400).json({ ok: false, message: 'A valid email is required.' });
+  }
+  // Demo only — intentionally does not persist a subscription.
+  res.json({ ok: true });
+});
+
 // Configure Socket.io
 const io = new Server(server, {
   cors: {

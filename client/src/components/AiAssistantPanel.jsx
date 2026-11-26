@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   Sparkles, Send, Bot, Copy, Check, ArrowRight, FilePlus, RotateCcw, Cpu, X,
-  PencilRuler, MessageSquare, Layers, AlertTriangle
+  PencilRuler, MessageSquare, Layers, AlertTriangle, KeyRound, ChevronDown, Trash2
 } from 'lucide-react';
 import api from '../services/api';
 import '../styles/rail.css';
@@ -28,6 +28,11 @@ const QUICK_EDIT = [
 
 const stamp = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+const describeSource = (model) => {
+  if (!model?.configured) return 'no key';
+  return model.source === 'saved' ? 'key added here' : `key from ${model.keyEnv}`;
+};
+
 const AiAssistantPanel = ({
   activeCode = '',
   activeFilePath = null,
@@ -53,30 +58,41 @@ const AiAssistantPanel = ({
       return '';
     }
   });
+  const [showKeys, setShowKeys] = useState(false);
+  const [keyDrafts, setKeyDrafts] = useState({});
+  const [keyBusy, setKeyBusy] = useState('');
+  const [keyError, setKeyError] = useState('');
+  const [keyNotice, setKeyNotice] = useState('');
   const endRef = useRef(null);
+
+  const refreshStatus = useCallback(
+    () => api.get('/ai/status')
+      .then((response) => setEngine(response.data))
+      .catch(() => setEngine({ kind: 'local', label: 'Offline engine' })),
+    []
+  );
+
+  const applyModelList = useCallback((list) => {
+    setModels(list);
+    setModelId((current) => {
+      if (current && list.some((model) => model.id === current && model.configured)) return current;
+      const firstConfigured = list.find((model) => model.configured);
+      if (firstConfigured) return firstConfigured.id;
+      return current && list.some((model) => model.id === current) ? current : (list[0]?.id || '');
+    });
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
 
-    api.get('/ai/status')
-      .then((response) => { if (!cancelled) setEngine(response.data); })
-      .catch(() => { if (!cancelled) setEngine({ kind: 'local', label: 'Offline engine' }); });
+    refreshStatus();
 
     api.get('/ai/models')
-      .then((response) => {
-        if (cancelled) return;
-        const list = response.data?.models || [];
-        setModels(list);
-        setModelId((current) => {
-          if (current && list.some((model) => model.id === current)) return current;
-          const firstConfigured = list.find((model) => model.configured);
-          return firstConfigured?.id || current;
-        });
-      })
+      .then((response) => { if (!cancelled) applyModelList(response.data?.models || []); })
       .catch(() => { if (!cancelled) setModels([]); });
 
     return () => { cancelled = true; };
-  }, []);
+  }, [refreshStatus, applyModelList]);
 
   useEffect(() => {
     try {
@@ -98,6 +114,45 @@ const AiAssistantPanel = ({
   const configuredModels = useMemo(() => models.filter((model) => model.configured), [models]);
   const isModel = engine?.kind === 'model' || configuredModels.length > 0;
   const canSend = Boolean(input.trim()) && !busy;
+
+  const saveKey = useCallback(async (providerId) => {
+    const value = (keyDrafts[providerId] || '').trim();
+    if (!value) {
+      setKeyError('Paste a key first.');
+      return;
+    }
+    setKeyBusy(providerId);
+    setKeyError('');
+    setKeyNotice('');
+    try {
+      const response = await api.post('/ai/keys', { provider: providerId, key: value });
+      applyModelList(response.data?.models || []);
+      setModelId(providerId);
+      setKeyDrafts((drafts) => ({ ...drafts, [providerId]: '' }));
+      setKeyNotice('Key saved. That provider is now the active model.');
+      refreshStatus();
+    } catch (error) {
+      setKeyError(error.response?.data?.message || 'The server refused that key.');
+    } finally {
+      setKeyBusy('');
+    }
+  }, [keyDrafts, applyModelList, refreshStatus]);
+
+  const removeKey = useCallback(async (providerId) => {
+    setKeyBusy(providerId);
+    setKeyError('');
+    setKeyNotice('');
+    try {
+      const response = await api.delete(`/ai/keys/${providerId}`);
+      applyModelList(response.data?.models || []);
+      setKeyNotice('Saved key removed. The server environment variable, if any, is used again.');
+      refreshStatus();
+    } catch (error) {
+      setKeyError(error.response?.data?.message || 'The server could not remove that key.');
+    } finally {
+      setKeyBusy('');
+    }
+  }, [applyModelList, refreshStatus]);
 
   const history = useCallback(
     () => messages.slice(-8).map((message) => ({ sender: message.role === 'user' ? 'user' : 'ai', text: message.text })),
@@ -218,6 +273,7 @@ const AiAssistantPanel = ({
   };
 
   const quick = mode === 'edit' ? QUICK_EDIT : QUICK_ANSWER;
+  const activeName = selectedModel ? `${selectedModel.vendor} · ${selectedModel.model}` : 'no model selected';
 
   return (
     <div className="ai-panel">
@@ -226,15 +282,15 @@ const AiAssistantPanel = ({
           <span className="ai-mark"><Sparkles size={13} /></span>
           <div>
             <strong>Assistant</strong>
-            <small>{activeFilePath ? `reading ${activeFilePath.split('/').pop()}` : 'no file open — general answers'}</small>
+            <small title={activeName}>{activeName}</small>
           </div>
         </div>
         <div className="ai-head-tools">
           <span
             className={`ai-engine ${isModel ? 'is-model' : ''}`}
-            title={isModel ? `Confirmed models: ${configuredModels.map((model) => model.label).join(', ')}` : 'Static analysis and a snippet library. Add a model key on the server for model answers.'}
+            title={isModel ? `Keys ready: ${configuredModels.map((model) => model.vendor).join(', ')}` : 'No API key yet. Add one under API keys.'}
           >
-            <Cpu size={10} /> {isModel ? `${configuredModels.length} model${configuredModels.length === 1 ? '' : 's'}` : 'offline'}
+            <Cpu size={10} /> {isModel ? `${configuredModels.length} ready` : 'offline'}
           </span>
           <button type="button" className="ai-mini" onClick={() => setMessages([])} title="Clear the conversation" aria-label="Clear conversation">
             <RotateCcw size={13} />
@@ -268,13 +324,13 @@ const AiAssistantPanel = ({
         </button>
       </div>
 
-      <label className="ai-model">
+      <div className="ai-model">
         <Layers size={11} />
         <select
           value={modelId}
           onChange={(event) => setModelId(event.target.value)}
           aria-label="AI model"
-          title="Each free tier has its own key. Configured models are listed first."
+          title="Pick the provider that answers. Add a key for any of them below."
         >
           {!models.length && <option value="">checking models…</option>}
           {models.map((model) => (
@@ -283,12 +339,92 @@ const AiAssistantPanel = ({
             </option>
           ))}
         </select>
-      </label>
+        <span className={`ai-model-dot ${selectedModel?.configured ? 'is-ok' : ''}`} title={selectedModel ? describeSource(selectedModel) : 'No model yet'} />
+      </div>
 
       {models.length > 0 && selectedModel && !selectedModel.configured && (
         <p className="ai-hint">
-          <AlertTriangle size={11} /> {selectedModel.keyEnv} is not set on the server, so another configured model answers.
+          <AlertTriangle size={11} /> No key for {selectedModel.vendor} yet — add {selectedModel.keyEnv} under API keys, or pick a ready model above.
         </p>
+      )}
+
+      <button
+        type="button"
+        className={`ai-keys-toggle ${showKeys ? 'is-open' : ''}`}
+        onClick={() => { setShowKeys((value) => !value); setKeyError(''); setKeyNotice(''); }}
+        aria-expanded={showKeys}
+      >
+        <KeyRound size={11} />
+        <span>API keys</span>
+        <span className="ai-keys-count">{configuredModels.length}/{models.length || 9}</span>
+        <ChevronDown size={12} className="ai-keys-chevron" />
+      </button>
+
+      {showKeys && (
+        <div className="ai-keys">
+          <p className="ai-keys-note">
+            Paste a key for any provider. It is stored on this server only and never sent back to the browser.
+          </p>
+
+          {models.map((model) => (
+            <div className="ai-key-row" key={model.id}>
+              <div className="ai-key-meta">
+                <strong>{model.vendor}</strong>
+                <span>{model.model}</span>
+                {model.signupUrl && (
+                  <a
+                    className="ai-key-link"
+                    href={model.signupUrl}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    title={`Create a ${model.vendor} key`}
+                  >
+                    get key ↗
+                  </a>
+                )}
+                <em className={model.configured ? 'is-ok' : ''}>{describeSource(model)}</em>
+              </div>
+              <div className="ai-key-form">
+                <input
+                  type="password"
+                  autoComplete="off"
+                  spellCheck="false"
+                  placeholder={model.keyEnv}
+                  value={keyDrafts[model.id] || ''}
+                  onChange={(event) => setKeyDrafts((drafts) => ({ ...drafts, [model.id]: event.target.value }))}
+                  onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); saveKey(model.id); } }}
+                  aria-label={`${model.vendor} API key`}
+                />
+                <button
+                  type="button"
+                  className="ai-key-save"
+                  onClick={() => saveKey(model.id)}
+                  disabled={keyBusy === model.id}
+                >
+                  {keyBusy === model.id ? '…' : 'Save'}
+                </button>
+                {model.source === 'saved' && (
+                  <button
+                    type="button"
+                    className="ai-key-clear"
+                    onClick={() => removeKey(model.id)}
+                    disabled={keyBusy === model.id}
+                    title="Remove the saved key"
+                    aria-label={`Remove saved ${model.vendor} key`}
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+
+          {keyError && <p className="ai-key-err">{keyError}</p>}
+          {keyNotice && <p className="ai-key-ok">{keyNotice}</p>}
+          <p className="ai-keys-note is-foot">
+            Free tiers: Groq, Google Gemini, Cerebras, OpenRouter, Mistral, Together and GitHub Models. OpenAI and Anthropic are paid.
+          </p>
+        </div>
       )}
 
       <div className="ai-pills">
@@ -312,10 +448,10 @@ const AiAssistantPanel = ({
             <strong>{mode === 'edit' ? 'Describe the change, and it edits the room' : 'Ask about the code that is open'}</strong>
             <span>
               {mode === 'edit'
-                ? 'The whole project is sent to the model, and the files it rewrites are applied to this room for everyone — you confirm before anything changes.'
+                ? 'The whole project is sent to the model you picked, and the files it rewrites are applied to this room for everyone — you confirm before anything changes.'
                 : isModel
-                  ? 'A model answers here, and it sees the file you are editing.'
-                  : 'Running offline: it reads your buffer for explanations, bug findings and safe rewrites, and hands back ready-made starters.'}
+                  ? `${activeName} answers here, and it sees the file you are editing.`
+                  : 'No provider has a key yet. Open API keys above and paste any free key — the assistant starts working immediately.'}
             </span>
           </div>
         )}

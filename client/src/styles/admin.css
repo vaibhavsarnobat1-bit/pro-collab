@@ -97,7 +97,7 @@
   border-radius: 15px;
   display: grid;
   place-items: center;
-  color: #fff;
+  color: var(--brand-ink);
   background: linear-gradient(140deg, var(--brand), var(--violet) 55%, var(--cyan));
   box-shadow: 0 10px 26px -10px var(--brand);
 }
@@ -363,7 +363,7 @@
   font-family: var(--font-display);
   font-size: 12px;
   font-weight: 800;
-  color: #fff;
+  color: var(--brand-ink);
   background: linear-gradient(140deg, var(--brand), var(--violet));
 }
 
@@ -624,10 +624,10 @@
 .ac-btn.is-danger {
   border-color: transparent;
   background: var(--bad);
-  color: #fff;
+  color: var(--brand-ink);
 }
 
-.ac-btn.is-danger:hover:not(:disabled) { filter: brightness(1.08); background: var(--bad); color: #fff; }
+.ac-btn.is-danger:hover:not(:disabled) { filter: brightness(1.08); background: var(--bad); color: var(--brand-ink); }
 
 .ac-footnote {
   font-family: 'Fira Code', ui-monospace, monospace;

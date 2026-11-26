@@ -1,7 +1,8 @@
 const express = require('express');
 const aiEngine = require('../services/aiEngine');
 const { editProject } = require('../services/aiAgent');
-const { listModels } = require('../services/aiProviders');
+const { PROVIDERS, listModels } = require('../services/aiProviders');
+const { setSavedKey, removeSavedKey } = require('../services/aiKeyStore');
 
 const router = express.Router();
 
@@ -46,6 +47,45 @@ router.get('/models', (req, res) => {
     configured: models.filter((model) => model.configured).map((model) => model.id),
     freeCount: models.filter((model) => model.free).length
   });
+});
+
+// Keys can be added from the assistant panel. The value goes in, never comes
+// back out: every response is the public model list with a `source` flag.
+router.post('/keys', rateLimit, (req, res) => {
+  const { provider = '', key = '' } = req.body || {};
+  const id = String(provider).trim().toLowerCase();
+  const provider_ = PROVIDERS.find((entry) => entry.id === id);
+  if (!provider_) return res.status(400).json({ message: 'Unknown provider.' });
+
+  const value = String(key).trim();
+  if (value.length < 8) return res.status(400).json({ message: 'That key looks too short to be valid.' });
+  if (value.length > 400) return res.status(400).json({ message: 'That key is too long.' });
+  if (/\s/.test(value)) return res.status(400).json({ message: 'A key cannot contain spaces — check the copy.' });
+
+  try {
+    setSavedKey(id, value);
+  } catch (error) {
+    console.error('ai/keys save failed:', error.message);
+    return res.status(500).json({ message: 'The server could not save that key. Check that server/data/ is writable.' });
+  }
+
+  console.log(`ai: key saved for ${provider_.label}`);
+  return res.json({ ok: true, provider: id, models: listModels() });
+});
+
+router.delete('/keys/:provider', rateLimit, (req, res) => {
+  const id = String(req.params.provider || '').trim().toLowerCase();
+  if (!PROVIDERS.some((entry) => entry.id === id)) {
+    return res.status(400).json({ message: 'Unknown provider.' });
+  }
+  let removed = false;
+  try {
+    removed = removeSavedKey(id);
+  } catch (error) {
+    console.error('ai/keys delete failed:', error.message);
+    return res.status(500).json({ message: 'The server could not remove that key.' });
+  }
+  return res.json({ ok: true, removed, models: listModels() });
 });
 
 router.post('/chat', rateLimit, async (req, res) => {

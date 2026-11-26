@@ -733,3 +733,115 @@
   .ws-room-name { max-width: 120px; }
   .ws-dirty { right: 14px; }
 }
+
+/* ═══════════════════════════════════════════════════════════
+   DESIGN-SYSTEM ALIGNMENT — top bar, tabs, responsive
+   ═══════════════════════════════════════════════════════════ */
+.ws-topbar {
+  height: 56px;
+  padding: 0 16px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.ws-segmented {
+  border-radius: var(--radius-pill, 9999px);
+}
+.ws-segmented button {
+  border-radius: var(--radius-pill, 9999px);
+}
+.ws-rail-tabs button.is-on::after {
+  background: var(--ws-ink, #e7e9ee);
+  height: 2px;
+}
+@media (max-width: 760px) {
+  .ws-topbar { padding: 0 10px; }
+  .ws-room-name { max-width: 100px; }
+  .ws-rail { position: absolute; right: 0; top: 56px; bottom: 0; z-index: 20; box-shadow: -8px 0 24px rgba(0,0,0,0.4); }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   ROOM REFRESH — floating panes on a quiet canvas
+   Panes get their own hairline frame and radius instead of
+   butting against each other, and the rail tabs read as pills.
+   ═══════════════════════════════════════════════════════════ */
+
+.ws-topbar {
+  height: 54px;
+  padding: 0 12px;
+  gap: 10px;
+  background: var(--ws-bg);
+}
+
+.ws-body {
+  gap: 8px;
+  padding: 8px;
+  background: var(--ws-bg);
+}
+
+.ws-side,
+.ws-main,
+.ws-rail {
+  border: 1px solid var(--ws-line);
+  border-radius: 14px;
+  background: var(--ws-panel);
+  overflow: hidden;
+}
+
+.ws-side { width: 250px; }
+.ws-main { padding: 8px; }
+.ws-rail { width: 320px; }
+
+.ws-grid {
+  gap: 8px;
+  padding: 0;
+  background: transparent;
+}
+
+.ws-cell {
+  border: 1px solid var(--ws-line);
+  border-radius: 10px;
+  background: var(--ws-panel);
+  overflow: hidden;
+}
+
+.ws-room-tag { border-radius: 999px; }
+
+.ws-chip {
+  height: 28px;
+  border-radius: 999px;
+}
+
+.ws-segmented {
+  padding: 3px;
+  border-radius: 999px;
+}
+
+.ws-segmented button {
+  height: 26px;
+  border-radius: 999px;
+}
+
+.ws-rail-tabs {
+  padding: 8px;
+  gap: 4px;
+  align-items: center;
+}
+
+.ws-rail-tabs button {
+  height: 30px;
+  padding: 0 11px;
+  border-radius: 999px;
+}
+
+.ws-rail-tabs button.is-on {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ws-ink);
+}
+
+.ws-rail-tabs button.is-on::after { display: none; }
+
+@media (max-width: 760px) {
+  .ws-body { gap: 6px; padding: 6px; }
+  .ws-side { width: 220px; }
+  .ws-rail { top: 54px; border-radius: 14px 0 0 0; }
+}

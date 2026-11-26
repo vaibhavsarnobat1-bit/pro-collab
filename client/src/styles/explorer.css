@@ -335,7 +335,7 @@
 .fe-arm-yes {
   border: 0;
   background: var(--bad);
-  color: #fff;
+  color: var(--brand-ink);
 }
 
 .fe-arm-no {
@@ -385,7 +385,7 @@
   border: 0;
   border-radius: 8px;
   background: var(--brand);
-  color: #fff;
+  color: var(--brand-ink);
   font-size: 11.5px;
   font-weight: 700;
   cursor: pointer;

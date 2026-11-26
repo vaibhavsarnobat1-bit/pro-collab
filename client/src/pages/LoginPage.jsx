@@ -2,12 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import ScrambleText from '../components/ScrambleText';
-import '../styles/auth.css';
-import {
-  Code2, Eye, EyeOff, AlertCircle, ArrowLeft, Shield, Video, Zap,
-  Sun, Moon, Check, Users, Radio
-} from 'lucide-react';
+import { Eye, EyeOff, AlertCircle, ArrowLeft, Sun, Moon } from 'lucide-react';
+import InteractiveGrid from '../components/landing/InteractiveGrid';
+import BrandLogo from '../components/landing/BrandLogo';
 
 const REMEMBER_KEY = 'pro_collab_remember';
 
@@ -57,105 +54,122 @@ const LoginPage = () => {
     }
   };
 
-  const quickFill = (u, p) => { setUsername(u); setPassword(p); setError(''); };
-
   return (
-    <div className="au-screen">
-      <div className="au-grid" aria-hidden="true" />
+    <div className="lp-page" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, position: 'relative', overflow: 'hidden' }}>
+      <InteractiveGrid />
+      <div
+        className="lp-orange-glow"
+        aria-hidden="true"
+        style={{
+          position: 'fixed',
+          width: 860,
+          height: 640,
+          top: '50%',
+          left: '50%',
+          marginLeft: -430,
+          marginTop: -320,
+          zIndex: 0,
+          opacity: 1,
+        }}
+      />
 
-      <div className="au-topbar">
-        <Link to="/" className="au-pill"><ArrowLeft size={15} /> Home</Link>
-        <button className="au-pill" onClick={toggleTheme} aria-label="Toggle colour scheme">
-          {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
-          <span>{theme === 'dark' ? 'Light' : 'Dark'}</span>
-        </button>
-      </div>
+      <div style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: 420, animation: 'lp-auth-in .6s cubic-bezier(.22,1,.36,1) both' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <Link to="/" className="lp-btn lp-btn-ghost" style={{ textDecoration: 'none', padding: '8px 12px' }}>
+            <ArrowLeft size={16} /> Home
+          </Link>
+          <button type="button" onClick={toggleTheme} className="lp-btn lp-btn-ghost lp-round" aria-label="Toggle theme" style={{ width: 36, height: 36, padding: 0 }}>
+            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
+        </div>
 
-      <div className="au-shell">
-        <aside className="au-left">
-          <div className="au-brand">
-            <span className="au-logo"><Code2 size={18} /></span>
-            <span className="au-wordmark">ProCollab</span>
-          </div>
-
-          <h2 className="au-left-title">
-            <ScrambleText text="One buffer," delay={100} /><br />many keyboards.
-          </h2>
-          <p className="au-left-sub">
-            Sign in to reopen your rooms, saved snippets and activity history across devices.
-          </p>
-
-          <div className="au-points">
-            <div className="au-point"><Zap size={15} /><div><strong>Delta sync</strong><span>Character edits land in under 20 ms.</span></div></div>
-            <div className="au-point"><Video size={15} /><div><strong>P2P calls</strong><span>WebRTC video, mic and screen share in-room.</span></div></div>
-            <div className="au-point"><Shield size={15} /><div><strong>Role-gated</strong><span>JWT-verified routes; admin portal stays separate.</span></div></div>
-          </div>
-
-          <div className="au-terminal">
-            <div className="au-term-head"><span className="au-dots"><i /><i /><i /></span><span>session</span></div>
-            <div className="au-term-body">
-              <p><span className="au-prompt">$</span> pro-collab auth --list</p>
-              <p className="au-out">admin       role=admin   demo tenant</p>
-              <p className="au-out">demo_user   role=user    shared rooms</p>
-              <p className="au-cur">▍</p>
+        <div className="lp-depth lp-surface lp-sq" style={{ padding: '34px 30px' }}>
+          <div style={{ textAlign: 'center', marginBottom: 26 }}>
+            <div style={{ display: 'inline-flex', justifyContent: 'center', marginBottom: 14 }}>
+              <BrandLogo size={36} />
             </div>
-          </div>
-        </aside>
-
-        <section className="au-right">
-          <div className="au-card-head">
-            <h1>Sign in</h1>
-            <p>Use your credentials, or jump into a demo room without an account.</p>
+            <h1 style={{ margin: 0, fontSize: 28, fontWeight: 600, letterSpacing: '-0.03em', color: 'var(--lp-fg)' }}>Sign in</h1>
+            <p style={{ color: 'var(--lp-muted)', marginTop: 6, fontSize: 14 }}>Welcome back to Pro-Collab.</p>
           </div>
 
-          {error && <div className="au-err" role="alert"><AlertCircle size={14} /> {error}</div>}
+          {error && (
+            <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#ef4444', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 12, padding: '10px 12px', marginBottom: 16, fontSize: 13.5 }}>
+              <AlertCircle size={15} /> {error}
+            </div>
+          )}
 
-          <form onSubmit={handleSubmit} className="au-form" noValidate>
-            <label className="au-field">
-              <span>username</span>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+              <span style={{ fontSize: 13, color: 'var(--lp-muted)', fontWeight: 500 }}>Username</span>
               <input
-                type="text" value={username} autoComplete="username" autoFocus
-                onChange={(e) => setUsername(e.target.value)} placeholder="admin"
+                className="lp-input lp-auth-input"
+                type="text"
+                value={username}
+                autoComplete="username"
+                autoFocus
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="admin"
               />
             </label>
 
-            <label className="au-field">
-              <span>password</span>
-              <div className="au-pass">
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+              <span style={{ fontSize: 13, color: 'var(--lp-muted)', fontWeight: 500 }}>Password</span>
+              <div style={{ position: 'relative' }}>
                 <input
-                  type={showPassword ? 'text' : 'password'} value={password} autoComplete="current-password"
-                  onChange={(e) => setPassword(e.target.value)} placeholder="••••••••"
+                  className="lp-input lp-auth-input"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  autoComplete="current-password"
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  style={{ paddingRight: 40 }}
                 />
-                <button type="button" onClick={() => setShowPassword((v) => !v)} aria-label={showPassword ? 'Hide password' : 'Show password'}>
-                  {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--lp-muted)' }}
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
             </label>
 
-            <button type="button" className={`au-remember ${rememberMe ? 'au-on' : ''}`} onClick={() => setRememberMe((v) => !v)}>
-              <span className="au-check"><Check size={11} /></span> Keep me signed in on this device
-            </button>
-
-            <button type="submit" className="au-submit" disabled={isSubmitting} id="login-submit-btn">
-              {isSubmitting ? <span className="au-spin" /> : 'Enter workspace'}
+            <button
+              type="submit"
+              className="lp-btn"
+              disabled={isSubmitting}
+              style={{
+                width: '100%',
+                marginTop: 4,
+                padding: '13px 18px',
+                fontSize: 15,
+                fontWeight: 600,
+                background: 'linear-gradient(135deg, #ff7a45, #f97316)',
+                color: '#ffffff',
+                boxShadow: '0 10px 26px -10px rgba(255, 122, 69, 0.7)',
+              }}
+            >
+              {isSubmitting ? 'Signing in…' : 'Sign in'}
             </button>
           </form>
 
-          <div className="au-quick">
-            <span className="au-quick-label"><Radio size={11} /> demo accounts</span>
-            <div className="au-pills">
-              <button onClick={() => quickFill('admin', 'admin123')}>admin / admin123</button>
-              <button onClick={() => quickFill('demo_user', 'user123')}>demo_user / user123</button>
-            </div>
-          </div>
-
-          <p className="au-foot">
-            New here? <Link to="/signup">Create a free account</Link> · or skip auth with a <Link to="/demo">demo room</Link>
+          <p style={{ textAlign: 'center', marginTop: 20, marginBottom: 0, fontSize: 14, color: 'var(--lp-muted)' }}>
+            New here? <Link to="/signup" style={{ color: '#ff7a45', textDecoration: 'none', fontWeight: 600 }}>Create an account</Link>
           </p>
-
-          <div className="au-trust"><Users size={12} /> Rooms, chat and editor state sync live once you are in.</div>
-        </section>
+        </div>
       </div>
+
+      <style>{`
+        @keyframes lp-auth-in {
+          from { opacity: 0; transform: translateY(18px) scale(0.98); }
+          to { opacity: 1; transform: none; }
+        }
+        .lp-auth-input:focus {
+          outline: 2px solid #ff7a45 !important;
+          outline-offset: 2px;
+        }
+      `}</style>
     </div>
   );
 };

@@ -158,7 +158,7 @@
   border: 0;
   border-radius: 9px;
   background: var(--brand);
-  color: #fff;
+  color: var(--brand-ink);
   cursor: pointer;
   transition: filter 0.16s, transform 0.1s;
 }
@@ -262,7 +262,7 @@
 .ai-msg.is-user .ai-bubble {
   background: var(--brand);
   border-color: transparent;
-  color: #fff;
+  color: var(--brand-ink);
 }
 
 .ai-reply {
@@ -369,13 +369,13 @@
 .ai-act.is-primary {
   background: var(--brand);
   border-color: transparent;
-  color: #fff;
+  color: var(--brand-ink);
 }
 
 .ai-act.is-primary:hover {
   filter: brightness(1.08);
   background: var(--brand);
-  color: #fff;
+  color: var(--brand-ink);
 }
 
 .ai-act.is-done {
@@ -658,3 +658,245 @@
 .ai-ops .ai-act { width: 100%; justify-content: center; }
 
 .ai-act:disabled { opacity: 0.6; cursor: default; }
+/* design-system alignment */
+.ai-bubble {
+  border-radius: 12px;
+  padding: 10px 12px;
+  line-height: 1.6;
+}
+.ai-msg.is-user .ai-bubble {
+  border-radius: 12px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MODEL PICKER + API KEYS
+   The native dropdown used to fall back to the browser's white
+   popup on Windows; both the control and its list are pinned to
+   the panel palette now.
+   ═══════════════════════════════════════════════════════════ */
+
+.ai-model {
+  color-scheme: dark;
+}
+
+.ai-model select {
+  color-scheme: dark;
+  background: transparent;
+  color: var(--ink);
+  appearance: none;
+  padding-right: 4px;
+}
+
+.ai-model select option {
+  background: var(--surface-solid);
+  color: var(--ink);
+}
+
+.ai-model-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--ink-faint);
+}
+
+.ai-model-dot.is-ok {
+  background: var(--ok);
+}
+
+.ai-keys-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: calc(100% - 24px);
+  margin: 0 12px 8px;
+  padding: 7px 10px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.ai-keys-toggle:hover,
+.ai-keys-toggle.is-open {
+  color: var(--ink);
+  border-color: var(--brand-line);
+  background: var(--brand-soft);
+}
+
+.ai-keys-toggle .ai-keys-count {
+  margin-left: auto;
+  font-family: 'Fira Code', ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--ink-faint);
+}
+
+.ai-keys-chevron {
+  transition: transform 0.18s ease;
+}
+
+.ai-keys-toggle.is-open .ai-keys-chevron {
+  transform: rotate(180deg);
+}
+
+.ai-keys {
+  margin: 0 12px 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface-2);
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
+.ai-keys-note {
+  margin: 0 0 9px;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--ink-faint);
+}
+
+.ai-keys-note.is-foot {
+  margin: 10px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.ai-key-row {
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+
+.ai-key-row:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.ai-key-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 5px;
+}
+
+.ai-key-meta strong {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.ai-key-meta span {
+  font-family: 'Fira Code', ui-monospace, monospace;
+  font-size: 9.5px;
+  color: var(--ink-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 22ch;
+}
+
+.ai-key-meta em {
+  margin-left: auto;
+  font-style: normal;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--ink-faint);
+}
+
+.ai-key-meta em.is-ok {
+  color: var(--ok);
+}
+
+.ai-key-form {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.ai-key-form input {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--input-bg);
+  color: var(--ink);
+  font-family: 'Fira Code', ui-monospace, monospace;
+  font-size: 10.5px;
+}
+
+.ai-key-form input:focus {
+  outline: none;
+  border-color: var(--brand-line);
+  box-shadow: 0 0 0 3px var(--brand-soft);
+}
+
+.ai-key-save {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--brand-line);
+  border-radius: 999px;
+  background: var(--brand);
+  color: var(--brand-ink);
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ai-key-save:disabled,
+.ai-key-clear:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ai-key-clear {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+}
+
+.ai-key-clear:hover {
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+
+.ai-key-err,
+.ai-key-ok {
+  margin: 8px 0 0;
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.ai-key-err { color: var(--warn); }
+.ai-key-ok { color: var(--ok); }
+
+/* Link straight to the provider's key page — the panel is where people look. */
+.ai-key-link {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  text-decoration: none;
+  border-bottom: 1px solid var(--line-strong);
+  padding-bottom: 1px;
+}
+
+.ai-key-link:hover {
+  color: var(--ink);
+  border-color: var(--brand-line);
+}

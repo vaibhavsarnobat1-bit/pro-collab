@@ -33,7 +33,7 @@
 .au-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 30px; }
 .au-logo {
   width: 32px; height: 32px; border-radius: 9px; background: linear-gradient(135deg, var(--brand), var(--violet) 60%, var(--cyan));
-  display: flex; align-items: center; justify-content: center; color: #fff;
+  display: flex; align-items: center; justify-content: center; color: var(--brand-ink);
 }
 .au-wordmark { font-family: var(--font-display); font-size: 16px; font-weight: 800; color: var(--ink); letter-spacing: -0.02em; }
 .au-left-title {
@@ -116,10 +116,10 @@
   align-items: center; justify-content: center; color: transparent; transition: all 0.2s; flex-shrink: 0;
 }
 .au-on { color: var(--ink); }
-.au-on .au-check { background: var(--brand); border-color: var(--brand); color: #fff; }
+.au-on .au-check { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); }
 
 .au-submit {
-  width: 100%; background: var(--brand); color: #fff; border: none; border-radius: 11px; padding: 13px;
+  width: 100%; background: var(--brand); color: var(--brand-ink); border: none; border-radius: 11px; padding: 13px;
   font-family: var(--font-display); font-size: 14px; font-weight: 700; cursor: pointer; display: flex;
   align-items: center; justify-content: center; transition: filter 0.2s, transform 0.15s;
   box-shadow: 0 12px 28px -14px var(--glow); margin-top: 2px;
@@ -127,7 +127,7 @@
 .au-submit:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); }
 .au-submit:disabled { opacity: 0.6; cursor: not-allowed; }
 .au-spin {
-  width: 17px; height: 17px; border: 2.5px solid rgba(255, 255, 255, 0.32); border-top-color: #fff;
+  width: 17px; height: 17px; border: 2.5px solid transparent; border-top-color: currentColor; border-right-color: currentColor;
   border-radius: 50%; animation: auSpin 0.7s linear infinite;
 }
 @keyframes auSpin { to { transform: rotate(360deg); } }

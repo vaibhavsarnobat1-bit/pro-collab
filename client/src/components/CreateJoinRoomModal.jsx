@@ -6,7 +6,6 @@ import {
 } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import '../styles/modal.css';
 
 const cleanRoomId = (raw) =>
   String(raw)
@@ -23,38 +22,10 @@ const slugBase = (title) => cleanRoomId(title)
 const suggestId = (title) => `${slugBase(title)}-${Math.random().toString(36).slice(2, 6)}`;
 
 const TEMPLATES = [
-  {
-    id: 'blank',
-    name: 'Blank canvas',
-    hint: 'Runnable HTML demo',
-    icon: FileCode2,
-    files: '4 files',
-    blurb: 'HTML, CSS and JS wired together so the preview works immediately.'
-  },
-  {
-    id: 'landing',
-    name: 'Landing page',
-    hint: 'Semantic HTML + CSS',
-    icon: LayoutTemplate,
-    files: '2 files',
-    blurb: 'A clean marketing page with system-font typography and no dependencies.'
-  },
-  {
-    id: 'react',
-    name: 'React app',
-    hint: 'Vite scaffold',
-    icon: Layers,
-    files: '4 files',
-    blurb: 'App and entry files, ready for you to paste into a local Vite project.'
-  },
-  {
-    id: 'node',
-    name: 'Node service',
-    hint: 'HTTP server',
-    icon: Server,
-    files: '3 files',
-    blurb: 'Minimal server with package.json, Logging and README included.'
-  }
+  { id: 'blank', name: 'Blank canvas', icon: FileCode2, hint: '4 files' },
+  { id: 'landing', name: 'Landing page', icon: LayoutTemplate, hint: '2 files' },
+  { id: 'react', name: 'React app', icon: Layers, hint: '4 files' },
+  { id: 'node', name: 'Node service', icon: Server, hint: '3 files' }
 ];
 
 const CreateJoinRoomModal = ({ isOpen, onClose }) => {
@@ -74,7 +45,6 @@ const CreateJoinRoomModal = ({ isOpen, onClose }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  // /workspace/* is JWT-protected; guests reach the same page through /demo/*.
   const roomPath = (roomId) => (user ? `/workspace/${roomId}` : `/demo/${roomId}`);
 
   useEffect(() => {
@@ -109,14 +79,9 @@ const CreateJoinRoomModal = ({ isOpen, onClose }) => {
     [customId, title]
   );
 
-  const selectedTemplate = TEMPLATES.find((item) => item.id === template) || TEMPLATES[0];
-
   if (!isOpen) return null;
 
-  const reset = () => {
-    setError('');
-    setBusy(false);
-  };
+  const reset = () => { setError(''); setBusy(false); };
 
   const submitCreate = async (event) => {
     event.preventDefault();
@@ -155,35 +120,80 @@ const CreateJoinRoomModal = ({ isOpen, onClose }) => {
     onClose();
   };
 
-  return (
-    <div className="cm-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <div className="cm-card" role="dialog" aria-modal="true" aria-labelledby="cm-title">
-        <header className="cm-head">
-          <div className="cm-head-copy">
-            <span className="cm-kicker">Workspace</span>
-            <h2 id="cm-title" className="cm-title">Start collaborating</h2>
-            <p className="cm-sub">One room, one shared buffer, everyone's edits live at once.</p>
-          </div>
-          <button type="button" className="cm-close" onClick={onClose} aria-label="Close">
-            <X size={15} />
-          </button>
-        </header>
+  const fieldStyle = { display: 'flex', flexDirection: 'column', gap: 7 };
+  const orangeBtn = {
+    background: 'linear-gradient(135deg, #ff7a45, #f97316)',
+    color: '#ffffff',
+    boxShadow: '0 10px 26px -10px rgba(255, 122, 69, 0.7)',
+    border: 0,
+  };
+  const ghostBtn = {
+    background: 'var(--lp-surface-2)',
+    color: 'var(--lp-fg)',
+    border: '1px solid var(--lp-line)',
+  };
 
-        <div className="cm-tabs" role="tablist">
+  return (
+    <div
+      className="lp-page"
+      onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 100,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 20,
+        background: 'rgba(10, 10, 12, 0.65)',
+        backdropFilter: 'blur(10px)',
+      }}
+    >
+      <div
+        className="lp-orange-glow"
+        aria-hidden="true"
+        style={{ position: 'fixed', width: 760, height: 560, top: '50%', left: '50%', marginLeft: -380, marginTop: -280, zIndex: 0 }}
+      />
+
+      <div
+        className="lp-depth lp-surface lp-sq"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="cm-title"
+        style={{
+          position: 'relative',
+          zIndex: 1,
+          width: '100%',
+          maxWidth: 620,
+          maxHeight: '90vh',
+          overflowY: 'auto',
+          padding: '28px 28px 24px',
+          animation: 'lp-modal-in .4s cubic-bezier(.22,1,.36,1) both',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+          <div>
+            <h2 id="cm-title" style={{ margin: 0, fontSize: 22, fontWeight: 600, letterSpacing: '-0.025em', color: 'var(--lp-fg)' }}>Start collaborating</h2>
+            <p style={{ margin: '4px 0 0', color: 'var(--lp-muted)', fontSize: 13.5 }}>One room, one shared buffer.</p>
+          </div>
+          <button type="button" className="lp-btn lp-btn-ghost lp-round" onClick={onClose} aria-label="Close" style={{ width: 34, height: 34, padding: 0 }}>
+            <X size={16} />
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, marginBottom: 18 }}>
           <button
             type="button"
-            role="tab"
-            aria-selected={tab === 'create'}
-            className={`cm-tab${tab === 'create' ? ' is-on' : ''}`}
+            className="lp-btn"
+            style={tab === 'create' ? orangeBtn : ghostBtn}
             onClick={() => { setTab('create'); reset(); }}
           >
             <Plus size={14} /> New room
           </button>
           <button
             type="button"
-            role="tab"
-            aria-selected={tab === 'join'}
-            className={`cm-tab${tab === 'join' ? ' is-on' : ''}`}
+            className="lp-btn"
+            style={tab === 'join' ? orangeBtn : ghostBtn}
             onClick={() => { setTab('join'); reset(); }}
           >
             <LogIn size={14} /> Join with code
@@ -191,219 +201,158 @@ const CreateJoinRoomModal = ({ isOpen, onClose }) => {
         </div>
 
         {tab === 'create' ? (
-          <div className="cm-panes">
-            <form className="cm-form" onSubmit={submitCreate} noValidate>
-              <label className="cm-field">
-                <span className="cm-label">Room name</span>
-                <input
-                  ref={firstFieldRef}
-                  type="text"
-                  value={title}
-                  onChange={(event) => { setTitle(event.target.value); setError(''); }}
-                  placeholder="Payments refactor"
-                  maxLength={60}
-                />
-              </label>
+          <form onSubmit={submitCreate} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <label style={fieldStyle}>
+              <span style={{ fontSize: 13, color: 'var(--lp-muted)', fontWeight: 500 }}>Room name</span>
+              <input className="lp-input lp-modal-input" ref={firstFieldRef} type="text" value={title} onChange={(e) => { setTitle(e.target.value); setError(''); }} placeholder="Payments refactor" maxLength={60} />
+            </label>
 
-              <label className="cm-field">
-                <span className="cm-label">
-                  Description
-                  <em>optional · shown to everyone who joins</em>
-                </span>
-                <textarea
-                  value={description}
-                  onChange={(event) => { setDescription(event.target.value.slice(0, 200)); setError(''); }}
-                  placeholder="What are we building in here?"
-                  rows={2}
-                />
-                <span className="cm-counter">{description.length}/200</span>
-              </label>
+            <label style={fieldStyle}>
+              <span style={{ fontSize: 13, color: 'var(--lp-muted)', fontWeight: 500 }}>Description (optional)</span>
+              <textarea className="lp-input lp-modal-input" value={description} onChange={(e) => { setDescription(e.target.value.slice(0, 200)); setError(''); }} placeholder="What are we building?" rows={2} style={{ resize: 'vertical' }} />
+            </label>
 
-              <div className="cm-field">
-                <span className="cm-label">Start from</span>
-                <div className="cm-templates" role="radiogroup" aria-label="Room template">
-                  {TEMPLATES.map((item) => {
-                    const Icon = item.icon;
-                    const active = template === item.id;
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        role="radio"
-                        aria-checked={active}
-                        className={`cm-template${active ? ' is-on' : ''}`}
-                        onClick={() => setTemplate(item.id)}
-                      >
-                        <Icon size={15} className="cm-template-icon" />
-                        <span className="cm-template-name">{item.name}</span>
-                        <span className="cm-template-hint">{item.files}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="cm-hint">{selectedTemplate.blurb}</p>
+            <div style={fieldStyle}>
+              <span style={{ fontSize: 13, color: 'var(--lp-muted)', fontWeight: 500 }}>Start from</span>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                {TEMPLATES.map((item) => {
+                  const Icon = item.icon;
+                  const active = template === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className="lp-btn"
+                      onClick={() => setTemplate(item.id)}
+                      style={{
+                        flexDirection: 'column',
+                        padding: '10px 8px',
+                        gap: 6,
+                        background: active ? 'rgba(255, 122, 69, 0.14)' : 'var(--lp-surface-2)',
+                        color: active ? '#ff7a45' : 'var(--lp-fg)',
+                        border: active ? '1px solid #ff7a45' : '1px solid var(--lp-line)',
+                      }}
+                    >
+                      <Icon size={16} />
+                      <span style={{ fontSize: 12 }}>{item.name}</span>
+                    </button>
+                  );
+                })}
               </div>
+            </div>
 
-              <label className="cm-field">
-                <span className="cm-label">
-                  Room code
-                  <em>used in the invite link</em>
-                </span>
-                <div className="cm-idwrap">
-                  <KeyRound size={14} />
-                  <input
-                    type="text"
-                    value={customId}
-                    onChange={(event) => { setCustomId(cleanRoomId(event.target.value)); setError(''); }}
-                    placeholder={resolvedCode}
-                    maxLength={40}
-                  />
-                  <button
-                    type="button"
-                    className="cm-rand"
-                    onClick={() => { setCustomId(suggestId(title || 'room')); setError(''); }}
-                    title="Generate another code"
-                    aria-label="Generate another room code"
-                  >
-                    <RefreshCw size={13} />
-                  </button>
+            <label style={fieldStyle}>
+              <span style={{ fontSize: 13, color: 'var(--lp-muted)', fontWeight: 500 }}>Room code</span>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ position: 'relative', flex: 1 }}>
+                  <KeyRound size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--lp-muted)' }} />
+                  <input className="lp-input lp-modal-input" type="text" value={customId} onChange={(e) => { setCustomId(cleanRoomId(e.target.value)); setError(''); }} placeholder={resolvedCode} maxLength={40} style={{ paddingLeft: 34 }} />
                 </div>
-              </label>
-
-              <div className={`cm-access${isPrivate ? ' is-locked' : ''}`}>
-                <div className="cm-access-row">
-                  <span className="cm-access-icon">{isPrivate ? <Lock size={13} /> : <Globe size={13} />}</span>
-                  <div className="cm-access-copy">
-                    <strong>{isPrivate ? 'Private room' : 'Public room'}</strong>
-                    <em>{isPrivate ? 'Listed nowhere. Password required.' : 'Appears in the public room list.'}</em>
-                  </div>
-                  <button
-                    type="button"
-                    className={`cm-switch${isPrivate ? ' is-on' : ''}`}
-                    role="switch"
-                    aria-checked={isPrivate}
-                    aria-label="Password protect this room"
-                    onClick={() => { setIsPrivate(!isPrivate); setError(''); }}
-                  >
-                    <span />
-                  </button>
-                </div>
-
-                {isPrivate && (
-                  <label className="cm-field cm-field-inline">
-                    <span className="cm-label">Password</span>
-                    <input
-                      type="password"
-                      value={password}
-                      onChange={(event) => { setPassword(event.target.value); setError(''); }}
-                      placeholder="At least 4 characters"
-                      autoComplete="new-password"
-                      maxLength={72}
-                    />
-                  </label>
-                )}
+                <button type="button" className="lp-btn" style={ghostBtn} onClick={() => { setCustomId(suggestId(title || 'room')); setError(''); }} aria-label="Generate code">
+                  <RefreshCw size={14} />
+                </button>
               </div>
+            </label>
 
-              {error && <p className="cm-error"><AlertCircle size={13} /> {error}</p>}
-
-              <button type="submit" className="cm-go" disabled={busy}>
-                {busy ? <><Loader2 size={15} className="cm-spin" /> Creating room…</> : <>Create and enter <ArrowRight size={15} /></>}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', border: '1px solid var(--lp-line)', borderRadius: 12, background: 'var(--lp-surface-2)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {isPrivate ? <Lock size={15} style={{ color: '#ff7a45' }} /> : <Globe size={15} style={{ color: 'var(--lp-muted)' }} />}
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--lp-fg)' }}>{isPrivate ? 'Private room' : 'Public room'}</div>
+                  <div style={{ fontSize: 12, color: 'var(--lp-muted)' }}>{isPrivate ? 'Password required' : 'Listed publicly'}</div>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="lp-btn"
+                onClick={() => { setIsPrivate(!isPrivate); setError(''); }}
+                style={isPrivate ? { ...orangeBtn, padding: '7px 14px' } : { ...ghostBtn, padding: '7px 14px' }}
+              >
+                {isPrivate ? 'Private' : 'Public'}
               </button>
-            </form>
+            </div>
 
-            <aside className="cm-aside" aria-label="Room preview">
-              <span className="cm-aside-label">Preview</span>
-              <div className="cm-preview">
-                <div className="cm-preview-top">
-                  <span className={`cm-preview-badge${isPrivate ? ' is-private' : ''}`}>
-                    {isPrivate ? <Lock size={10} /> : <Globe size={10} />}
-                    {isPrivate ? 'Private' : 'Public'}
-                  </span>
-                  <span className="cm-preview-template">{selectedTemplate.name}</span>
-                </div>
-                <h3 className="cm-preview-title">{title.trim() || 'Untitled room'}</h3>
-                <p className="cm-preview-desc">
-                  {description.trim() || 'No description yet — add one so people know what they are joining.'}
-                </p>
-                <div className="cm-preview-foot">
-                  <code>{resolvedCode}</code>
-                  <span className="cm-preview-people"><Users size={11} /> 1</span>
-                </div>
+            {isPrivate && (
+              <label style={fieldStyle}>
+                <span style={{ fontSize: 13, color: 'var(--lp-muted)', fontWeight: 500 }}>Password</span>
+                <input className="lp-input lp-modal-input" type="password" value={password} onChange={(e) => { setPassword(e.target.value); setError(''); }} placeholder="At least 4 characters" autoComplete="new-password" maxLength={72} />
+              </label>
+            )}
+
+            {error && (
+              <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#ef4444', fontSize: 13.5 }}>
+                <AlertCircle size={14} /> {error}
               </div>
+            )}
 
-              <ul className="cm-checklist">
-                <li>Edits sync live to everyone in the room</li>
-                <li>Live preview updates as you type</li>
-                <li>Export the whole project as a zip</li>
-              </ul>
-            </aside>
-          </div>
+            <button type="submit" className="lp-btn" disabled={busy} style={{ ...orangeBtn, width: '100%', padding: '13px 18px', fontSize: 15, fontWeight: 600 }}>
+              {busy ? <><Loader2 size={15} /> Creating…</> : <>Create and enter <ArrowRight size={15} /></>}
+            </button>
+          </form>
         ) : (
-          <div className="cm-panes is-single">
-            <form className="cm-form" onSubmit={submitJoin} noValidate>
-              <label className="cm-field">
-                <span className="cm-label">Room code or invite link</span>
-                <div className="cm-idwrap">
-                  <Link2 size={14} />
-                  <input
-                    ref={firstFieldRef}
-                    type="text"
-                    value={joinId}
-                    onChange={(event) => { setJoinId(event.target.value); setError(''); }}
-                    placeholder="payments-refactor-4f2a"
-                    maxLength={200}
-                  />
-                </div>
-              </label>
-
-              {error && <p className="cm-error"><AlertCircle size={13} /> {error}</p>}
-
-              <button type="submit" className="cm-go is-alt">
-                Enter room <ArrowRight size={15} />
-              </button>
-
-              <div className="cm-list">
-                <div className="cm-list-head">
-                  <span>Open rooms right now</span>
-                  <span className="cm-count">{openRooms.length}</span>
-                </div>
-
-                {roomsLoading ? (
-                  <p className="cm-list-empty">Looking for public rooms…</p>
-                ) : openRooms.length === 0 ? (
-                  <p className="cm-list-empty">Nothing is public at the moment. A private room still opens with its code.</p>
-                ) : (
-                  <ul>
-                    {openRooms.slice(0, 8).map((room) => (
-                      <li key={room.roomId}>
-                        <button type="button" className="cm-row" onClick={() => enter(room.roomId)}>
-                          <span className="cm-row-main">
-                            <span className="cm-row-name">{room.title || room.roomId}</span>
-                            <span className="cm-row-desc">
-                              {room.description || `Room code · ${room.roomId}`}
-                            </span>
-                          </span>
-                          <span className="cm-row-meta">
-                            <span className="cm-row-peers"><Users size={11} /> {room.occupants || 0}</span>
-                            <ArrowRight size={13} className="cm-row-go" />
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+          <form onSubmit={submitJoin} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <label style={fieldStyle}>
+              <span style={{ fontSize: 13, color: 'var(--lp-muted)', fontWeight: 500 }}>Room code or invite link</span>
+              <div style={{ position: 'relative' }}>
+                <Link2 size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--lp-muted)' }} />
+                <input className="lp-input lp-modal-input" ref={firstFieldRef} type="text" value={joinId} onChange={(e) => { setJoinId(e.target.value); setError(''); }} placeholder="payments-refactor-4f2a" maxLength={200} style={{ paddingLeft: 34 }} />
               </div>
-            </form>
-          </div>
+            </label>
+
+            {error && (
+              <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#ef4444', fontSize: 13.5 }}>
+                <AlertCircle size={14} /> {error}
+              </div>
+            )}
+
+            <button type="submit" className="lp-btn" style={{ ...orangeBtn, width: '100%', padding: '13px 18px', fontSize: 15, fontWeight: 600 }}>
+              Enter room <ArrowRight size={15} />
+            </button>
+
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: 13, color: 'var(--lp-muted)' }}>Open rooms</span>
+                <span style={{ fontSize: 12, color: 'var(--lp-muted)' }}>{openRooms.length}</span>
+              </div>
+              {roomsLoading ? (
+                <p style={{ color: 'var(--lp-muted)', fontSize: 14 }}>Looking for public rooms…</p>
+              ) : openRooms.length === 0 ? (
+                <p style={{ color: 'var(--lp-muted)', fontSize: 14 }}>No public rooms right now.</p>
+              ) : (
+                <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 180, overflowY: 'auto' }}>
+                  {openRooms.slice(0, 8).map((room) => (
+                    <li key={room.roomId}>
+                      <button type="button" className="lp-btn" onClick={() => enter(room.roomId)} style={{ ...ghostBtn, width: '100%', justifyContent: 'space-between' }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <Users size={14} style={{ color: '#ff7a45' }} /> {room.title || room.roomId}
+                        </span>
+                        <ArrowRight size={14} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </form>
         )}
 
-        <p className="cm-foot">
+        <div style={{ marginTop: 18, textAlign: 'center', fontSize: 13, color: 'var(--lp-muted)' }}>
           Just looking?{' '}
-          <button type="button" className="cm-linkish" onClick={() => { navigate('/demo'); onClose(); }}>
-            Open the demo room
-          </button>{' '}
-          — no account needed.
-        </p>
+          <button type="button" className="lp-btn lp-btn-ghost" onClick={() => { navigate('/demo'); onClose(); }} style={{ padding: '4px 8px', color: '#ff7a45' }}>
+            Open demo room
+          </button>
+        </div>
+
+        <style>{`
+          @keyframes lp-modal-in {
+            from { opacity: 0; transform: translateY(16px) scale(0.97); }
+            to { opacity: 1; transform: none; }
+          }
+          .lp-modal-input:focus {
+            outline: 2px solid #ff7a45 !important;
+            outline-offset: 2px;
+          }
+        `}</style>
       </div>
     </div>
   );

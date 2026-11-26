@@ -34,8 +34,8 @@ const LazyAdmin = React.lazy(() => import('./pages/AdminDashboard'));
 
 const AppRoutes = () => {
   const location = useLocation();
-  // Login and signup render their own brand header and hide the navbar.
-  const chromeless = location.pathname === '/login' || location.pathname === '/signup';
+  // Landing, login, and signup render their own header and hide the app navbar.
+  const chromeless = location.pathname === '/' || location.pathname === '/login' || location.pathname === '/signup';
 
   return (
     <div className="app-shell">

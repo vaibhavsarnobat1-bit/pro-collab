@@ -281,7 +281,7 @@ const ProfilePage = () => {
         .pf-hero { display: flex; align-items: center; gap: 22px; background: var(--surface-solid); border: 1px solid var(--line-strong);
           border-radius: 20px; padding: 26px 28px; box-shadow: var(--shadow); position: relative; overflow: hidden; }
         .pf-hero::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--accent); }
-        .pf-avatar { width: 82px; height: 82px; border-radius: 20px; background: var(--accent); color: #fff; display: flex;
+        .pf-avatar { width: 82px; height: 82px; border-radius: 20px; background: var(--accent); color: var(--brand-ink); display: flex;
           align-items: center; justify-content: center; font-family: var(--font-display); font-size: 30px; font-weight: 800;
           box-shadow: 0 14px 30px -14px var(--accent); flex-shrink: 0; }
         .pf-hero-text { flex: 1; min-width: 0; }
@@ -327,13 +327,13 @@ const ProfilePage = () => {
         .pf-swatch-on { border-color: var(--ink); box-shadow: 0 0 0 3px var(--brand-soft); }
 
         .pf-actions { display: flex; align-items: center; gap: 14px; margin-top: 20px; }
-        .pf-save { display: inline-flex; align-items: center; justify-content: center; gap: 8px; background: var(--brand); color: #fff;
+        .pf-save { display: inline-flex; align-items: center; justify-content: center; gap: 8px; background: var(--brand); color: var(--brand-ink);
           border: none; border-radius: 11px; padding: 11px 18px; font-family: var(--font-display); font-size: 13.5px; font-weight: 700;
           cursor: pointer; transition: filter 0.2s, transform 0.15s; box-shadow: 0 12px 26px -14px var(--glow); min-width: 150px; }
         .pf-save:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); }
         .pf-save:disabled { opacity: 0.55; cursor: not-allowed; }
         .pf-saved { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ok); }
-        .pf-spin { width: 15px; height: 15px; border: 2px solid rgba(255,255,255,0.32); border-top-color: #fff; border-radius: 50%;
+        .pf-spin { width: 15px; height: 15px; border: 2px solid transparent; border-top-color: currentColor; border-right-color: currentColor; border-radius: 50%;
           animation: pfSpin 0.7s linear infinite; }
         .pf-loading .pf-spin { border-color: var(--line-strong); border-top-color: var(--brand); }
         @keyframes pfSpin { to { transform: rotate(360deg); } }

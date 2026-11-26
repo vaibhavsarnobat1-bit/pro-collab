@@ -339,12 +339,12 @@
 .et-btn.is-dirty {
   border-color: transparent;
   background: var(--brand);
-  color: #fff;
+  color: var(--brand-ink);
 }
 
 .et-btn.is-dirty:hover {
   filter: brightness(1.08);
-  color: #fff;
+  color: var(--brand-ink);
 }
 
 .et-btn.is-run {

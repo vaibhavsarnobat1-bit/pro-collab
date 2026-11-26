@@ -818,3 +818,17 @@
 .pp-spin {
   animation: ws-spin 0.7s linear infinite;
 }
+
+/* design-system alignment */
+.cp-msg {
+  border-radius: 10px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.cp-text {
+  color: #e7e9ee;
+  line-height: 1.6;
+}
+.cp-compose {
+  padding: 10px 12px;
+}

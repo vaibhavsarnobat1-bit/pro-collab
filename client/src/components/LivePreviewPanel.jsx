@@ -20,7 +20,9 @@ const AUTO_RUN_DELAY_MS = 600;
 const LOG_LEVELS = ['log', 'info', 'warn', 'error', 'debug', 'table', 'system'];
 const SCRIPT_EXTENSIONS = ['js', 'mjs', 'cjs'];
 const COMPILED_EXTENSIONS = ['jsx', 'ts', 'tsx', 'vue', 'svelte'];
+const BABEL_EXTENSIONS = ['jsx', 'ts', 'tsx'];
 const STYLE_EXTENSIONS = ['css'];
+const BABEL_RUNTIME_SCRIPT = '<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>';
 
 /* ------------------------------------------------------------------ *
  * Sandbox capture runtime.
@@ -359,9 +361,11 @@ function inlineProjectReferences(html, context) {
     const strippedAttrs = attrs
       .replace(/\s*\bsrc\s*=\s*(["'])[^"']*\1/i, '')
       .replace(/\s*\bsrc\s*=\s*[^\s"'>]+/i, '');
+    const isBabel = BABEL_EXTENSIONS.includes(extensionOf(hit.path));
+    const typeAttr = isBabel ? ' type="text/babel" data-presets="react,typescript"' : '';
     const content = hit.path === normalizePath(activeFilePath) ? activeFileContent : hit.content;
     return [
-      `<script${strippedAttrs} data-preview-src="${escapeAttr(hit.path)}">`,
+      `<script${typeAttr}${strippedAttrs} data-preview-src="${escapeAttr(hit.path)}">`,
       escapeScriptBody(content),
       `//# sourceURL=${hit.path}`,
       '</script>'
@@ -375,10 +379,11 @@ function inlineProjectReferences(html, context) {
 }
 
 function injectCaptureShim(html, shim) {
-  if (/<head[\s>]/i.test(html)) return html.replace(/<head\b[^>]*>/i, (tag) => `${tag}\n${shim}`);
-  if (/<html[\s>]/i.test(html)) return html.replace(/<html\b[^>]*>/i, (tag) => `${tag}\n<head>${shim}</head>`);
-  if (/<body[\s>]/i.test(html)) return html.replace(/<body\b[^>]*>/i, (tag) => `${tag}\n${shim}`);
-  return `${shim}\n${html}`;
+  const combined = `${BABEL_RUNTIME_SCRIPT}\n${shim}`;
+  if (/<head[\s>]/i.test(html)) return html.replace(/<head\b[^>]*>/i, (tag) => `${tag}\n${combined}`);
+  if (/<html[\s>]/i.test(html)) return html.replace(/<html\b[^>]*>/i, (tag) => `${tag}\n<head>${combined}</head>`);
+  if (/<body[\s>]/i.test(html)) return html.replace(/<body\b[^>]*>/i, (tag) => `${tag}\n${combined}`);
+  return `${combined}\n${html}`;
 }
 
 const BASE_PREVIEW_STYLES = `
@@ -403,6 +408,7 @@ function buildShellDocument({ title, styles, body, scripts, shim }) {
     '<meta name="viewport" content="width=device-width, initial-scale=1.0" />',
     `<title>${escapeComment(title)}</title>`,
     shim,
+    BABEL_RUNTIME_SCRIPT,
     `<style>${BASE_PREVIEW_STYLES}</style>`,
     styles,
     '</head>',
@@ -452,8 +458,12 @@ function collectFallbackFiles(files, activeFilePath, activeFileContent, extensio
 const renderStyleTag = (file) =>
   `<style data-preview-src="${escapeAttr(file.path)}">\n${escapeStyleBody(file.content)}\n</style>`;
 
-const renderScriptTag = (file) =>
-  `<script data-preview-src="${escapeAttr(file.path)}">\n${escapeScriptBody(file.content)}\n//# sourceURL=${file.path}\n</script>`;
+const renderScriptTag = (file) => {
+  const ext = extensionOf(file.path);
+  const isBabel = BABEL_EXTENSIONS.includes(ext);
+  const typeAttr = isBabel ? ' type="text/babel" data-presets="react,typescript"' : '';
+  return `<script${typeAttr} data-preview-src="${escapeAttr(file.path)}">\n${escapeScriptBody(file.content)}\n//# sourceURL=${file.path}\n</script>`;
+};
 
 /* ------------------------------------------------------------------ *
  * Compile entry point
@@ -515,9 +525,9 @@ function buildPreviewDocument({ activeFileContent, activeFilePath, filesMap, par
 
   const hasOwnReferences = /<link\b/i.test(source) || /\bsrc\s*=/i.test(source);
 
-  if (SCRIPT_EXTENSIONS.includes(ext) && !hasOwnReferences) {
+  if ([...SCRIPT_EXTENSIONS, ...BABEL_EXTENSIONS].includes(ext) && !hasOwnReferences) {
     const styleFiles = collectFallbackFiles(files, safePath, source, STYLE_EXTENSIONS, notes);
-    const scriptFiles = collectFallbackFiles(files, safePath, source, SCRIPT_EXTENSIONS, notes);
+    const scriptFiles = collectFallbackFiles(files, safePath, source, [...SCRIPT_EXTENSIONS, ...BABEL_EXTENSIONS], notes);
     notes.push(`No stylesheet or script references found in ${safePath}, so every JavaScript file in the project was injected.`);
     return {
       html: buildShellDocument({
@@ -544,7 +554,7 @@ function buildPreviewDocument({ activeFileContent, activeFilePath, filesMap, par
 
   if (!hasOwnReferences) {
     const styleFiles = collectFallbackFiles(files, safePath, source, STYLE_EXTENSIONS, notes);
-    const scriptFiles = collectFallbackFiles(files, safePath, source, SCRIPT_EXTENSIONS, notes);
+    const scriptFiles = collectFallbackFiles(files, safePath, source, [...SCRIPT_EXTENSIONS, ...BABEL_EXTENSIONS], notes);
     notes.push(`No stylesheet or script references found in ${safePath}, so every JavaScript and CSS file in the project was injected.`);
     return {
       html: buildShellDocument({
