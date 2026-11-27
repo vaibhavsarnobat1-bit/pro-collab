@@ -50,9 +50,9 @@ function MockWindow() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '170px 1fr 240px', minHeight: 270 }}>
+      <div className="lp-hero-mock-grid">
         {/* file explorer */}
-        <div style={{ borderRight: '1px solid var(--lp-line)', padding: 14, display: 'grid', gap: 6, alignContent: 'start' }}>
+        <div className="lp-hero-mock-explorer" style={{ borderRight: '1px solid var(--lp-line)', padding: 14, display: 'grid', gap: 6, alignContent: 'start' }}>
           <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--lp-faint)', marginBottom: 4 }}>Explorer</span>
           {files.map((f) => (
             <div
@@ -76,7 +76,7 @@ function MockWindow() {
         </div>
 
         {/* shared code editor */}
-        <div style={{ borderRight: '1px solid var(--lp-line)', padding: '14px 18px', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, lineHeight: 2, position: 'relative', background: 'var(--lp-surface)' }}>
+        <div className="lp-hero-mock-editor" style={{ borderRight: '1px solid var(--lp-line)', padding: '14px 18px', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, lineHeight: 2, position: 'relative', background: 'var(--lp-surface)', overflowX: 'auto' }}>
           <div style={{ fontSize: 11, color: 'var(--lp-faint)', marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
             <span>src / App.jsx</span>
             <span style={{ color: 'var(--brand)' }}>Synced</span>
@@ -129,7 +129,7 @@ function MockWindow() {
 
 export default function Hero() {
   return (
-    <section id="top" className="lp-noise" style={{ position: 'relative', padding: '176px 24px 64px', textAlign: 'center', overflow: 'hidden' }}>
+    <section id="top" className="lp-noise lp-hero-section" style={{ position: 'relative', textAlign: 'center', overflow: 'hidden' }}>
       {/* backdrop */}
       <div className="lp-aurora lp-aurora-a" style={{ width: 420, height: 420, top: -80, left: '8%' }} />
       <div className="lp-aurora lp-aurora-b" style={{ width: 380, height: 380, top: 40, right: '4%' }} />

@@ -71,7 +71,7 @@ export default function LandingNavbar({ onStarted }) {
             <BrandLogo size={32} />
           </a>
 
-          <nav style={{ display: 'flex', gap: 26, marginLeft: 8, flex: 1 }}>
+          <nav className="lp-nav-links-desktop" style={{ gap: 26, marginLeft: 8, flex: 1 }}>
             {nav.links.map((l) => (
               <button
                 key={l.id}
@@ -86,42 +86,56 @@ export default function LandingNavbar({ onStarted }) {
             ))}
           </nav>
 
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <button
-              type="button"
-              onClick={() => setIsModalOpen(true)}
-              className="lp-btn lp-btn-ghost"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-            >
-              <PlusCircle size={15} />
-              <span>New Room</span>
-            </button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 'auto' }}>
+            <div className="lp-nav-actions-desktop" style={{ gap: 10, alignItems: 'center' }}>
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(true)}
+                className="lp-btn lp-btn-ghost"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              >
+                <PlusCircle size={15} />
+                <span>New Room</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={toggleTheme}
+                aria-label="Toggle theme"
+                className="lp-btn lp-btn-ghost lp-round"
+                style={{ width: 36, height: 36, padding: 0, display: 'grid', placeItems: 'center' }}
+              >
+                {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+              </button>
+
+              {user ? (
+                <Link to="/workspace" className="lp-btn lp-btn-ghost">Workspace</Link>
+              ) : (
+                <Link to="/login" className="lp-btn lp-btn-ghost">{nav.signIn}</Link>
+              )}
+
+              <button type="button" className="lp-btn lp-btn-primary" onClick={onStarted}>
+                {nav.cta}
+              </button>
+            </div>
 
             <button
               type="button"
               onClick={toggleTheme}
               aria-label="Toggle theme"
-              className="lp-btn lp-btn-ghost lp-round"
-              style={{ width: 36, height: 36, padding: 0, display: 'grid', placeItems: 'center' }}
+              className="lp-btn lp-btn-ghost lp-round lp-nav-menu-btn"
+              style={{ width: 36, height: 36, padding: 0, placeItems: 'center' }}
             >
               {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
             </button>
 
-            {user ? (
-              <Link to="/workspace" className="lp-btn lp-btn-ghost">Workspace</Link>
-            ) : (
-              <Link to="/login" className="lp-btn lp-btn-ghost">{nav.signIn}</Link>
-            )}
-
-            <button type="button" className="lp-btn lp-btn-primary" onClick={onStarted}>
-              {nav.cta}
-            </button>
             <button
               type="button"
               aria-expanded={open}
               aria-label="Menu"
               onClick={() => setOpen((v) => !v)}
-              style={{ background: 'none', border: 0, color: 'var(--lp-fg)', display: 'grid', placeItems: 'center', cursor: 'pointer', padding: 6 }}
+              className="lp-nav-menu-btn"
+              style={{ background: 'none', border: 0, color: 'var(--lp-fg)', placeItems: 'center', cursor: 'pointer', padding: 6 }}
             >
               {open ? <X size={20} /> : <Menu size={20} />}
             </button>

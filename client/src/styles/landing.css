@@ -259,12 +259,41 @@
 }
 
 /* ── Responsive ──────────────────────────────────────────── */
+.lp-nav-links-desktop { display: flex; }
+.lp-nav-actions-desktop { display: flex; }
+.lp-nav-menu-btn { display: none; }
+.lp-hero-section { padding: 176px 24px 64px; }
+.lp-hero-mock-grid { display: grid; grid-template-columns: 170px 1fr 240px; min-height: 270px; }
+.lp-showcase-panel { aspect-ratio: 16/10; padding: 24px; }
+.lp-footer-grid { display: grid; grid-template-columns: 1.5fr repeat(4, 1fr); gap: 24px; }
+.lp-modal-templates { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+
+@media (max-width: 900px) {
+  .lp-nav-links-desktop { display: none !important; }
+  .lp-nav-actions-desktop { display: none !important; }
+  .lp-nav-menu-btn { display: grid !important; }
+  .lp-page .lp-showcase-grid { grid-template-columns: 1fr !important; gap: 24px !important; }
+  .lp-page .lp-showcase-grid > :first-child { position: static !important; }
+  .lp-footer-grid { grid-template-columns: repeat(2, 1fr) !important; }
+  .lp-footer-grid > :first-child { grid-column: span 2; }
+}
+
 @media (max-width: 768px) {
+  .lp-hero-section { padding: 124px 16px 44px !important; }
+  .lp-hero-mock-grid { grid-template-columns: 1fr !important; min-height: auto !important; }
+  .lp-hero-mock-explorer { display: none !important; }
+  .lp-hero-mock-editor { border-right: 0 !important; border-bottom: 1px solid var(--lp-line); }
+  .lp-showcase-panel { aspect-ratio: auto !important; min-height: 280px; padding: 16px !important; }
   .lp-page .lp-bento { grid-template-columns: 1fr !important; grid-auto-rows: auto !important; }
   .lp-page .lp-bento > .lp-wide { grid-column: span 1 !important; }
-  .lp-page .lp-showcase-grid { grid-template-columns: 1fr !important; }
-  .lp-page .lp-showcase-grid > :first-child { position: static !important; }
-  .lp-page .lp-aurora { width: 260px !important; height: 260px !important; }
+  .lp-page .lp-aurora { width: 240px !important; height: 240px !important; }
+  .lp-orange-glow { max-width: 100vw; }
+}
+
+@media (max-width: 520px) {
+  .lp-modal-templates { grid-template-columns: repeat(2, 1fr) !important; }
+  .lp-footer-grid { grid-template-columns: 1fr !important; }
+  .lp-footer-grid > :first-child { grid-column: span 1; }
 }
 
 /* ── Video call talker pulse ─────────────────────────────── */

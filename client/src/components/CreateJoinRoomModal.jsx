@@ -214,7 +214,7 @@ const CreateJoinRoomModal = ({ isOpen, onClose }) => {
 
             <div style={fieldStyle}>
               <span style={{ fontSize: 13, color: 'var(--lp-muted)', fontWeight: 500 }}>Start from</span>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+              <div className="lp-modal-templates">
                 {TEMPLATES.map((item) => {
                   const Icon = item.icon;
                   const active = template === item.id;

@@ -27,11 +27,11 @@ function EditorPanel() {
         ))}
 
         {/* animated live cursors */}
-        <div className="lp-sc-cursor-a" style={{ position: 'absolute', top: 52, left: 210, display: 'flex', alignItems: 'center', gap: 3 }}>
+        <div className="lp-sc-cursor-a" style={{ position: 'absolute', top: 52, left: '54%', display: 'flex', alignItems: 'center', gap: 3 }}>
           <span style={{ width: 2, height: 18, background: '#ff7a45', borderRadius: 2 }} />
           <span style={{ fontSize: 10, background: '#ff7a45', color: '#ffffff', padding: '1px 7px', borderRadius: 6, fontWeight: 700 }}>Aria</span>
         </div>
-        <div className="lp-sc-cursor-b" style={{ position: 'absolute', top: 106, left: 260, display: 'flex', alignItems: 'center', gap: 3 }}>
+        <div className="lp-sc-cursor-b" style={{ position: 'absolute', top: 106, left: '64%', display: 'flex', alignItems: 'center', gap: 3 }}>
           <span style={{ width: 2, height: 18, background: '#8b5cf6', borderRadius: 2 }} />
           <span style={{ fontSize: 10, background: '#8b5cf6', color: '#ffffff', padding: '1px 7px', borderRadius: 6, fontWeight: 700 }}>Noah</span>
         </div>
@@ -235,7 +235,7 @@ export default function Showcase() {
             aria-hidden="true"
             style={{ position: 'absolute', inset: '-48px -14%', zIndex: 0 }}
           />
-          <div className="lp-depth lp-surface lp-sq" style={{ aspectRatio: '16/10', padding: 24, overflow: 'hidden', position: 'relative', zIndex: 1 }}>
+          <div className="lp-depth lp-surface lp-sq lp-showcase-panel" style={{ overflow: 'hidden', position: 'relative', zIndex: 1 }}>
             <div key={active} style={{ animation: 'lp-tab .35s cubic-bezier(.22,1,.36,1) both' }} className="lp-tab">
               {PANELS[active]}
             </div>

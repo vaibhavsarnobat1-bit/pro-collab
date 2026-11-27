@@ -7,7 +7,7 @@ export default function LandingFooter() {
   return (
     <footer style={{ padding: '72px 24px 32px' }}>
       <div style={{ maxWidth: 1120, margin: '0 auto' }}>
-        <div style={{ borderBottom: '1px solid var(--lp-line)', paddingBottom: 40, display: 'grid', gridTemplateColumns: '1.5fr repeat(4,1fr)', gap: 24 }}>
+        <div className="lp-footer-grid" style={{ borderBottom: '1px solid var(--lp-line)', paddingBottom: 40 }}>
           <div>
             <BrandLogo size={28} />
             <p style={{ color: 'var(--lp-faint)', fontSize: 14, marginTop: 10, maxWidth: 220, lineHeight: 1.6 }}>{footer.blurb}</p>
