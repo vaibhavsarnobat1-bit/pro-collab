@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import LandingNavbar from '../components/landing/LandingNavbar';
 import InteractiveGrid from '../components/landing/InteractiveGrid';
+import CreateJoinRoomModal from '../components/CreateJoinRoomModal';
 import Hero from '../components/landing/Hero';
 import LogoCloud from '../components/landing/LogoCloud';
 import Features from '../components/landing/Features';
@@ -13,17 +14,15 @@ import FinalCta from '../components/landing/FinalCta';
 import LandingFooter from '../components/landing/LandingFooter';
 
 const HomePage = () => {
-  const handleStarted = () => {
-    const el = document.getElementById('projects');
-    if (el) el.scrollIntoView({ behavior: 'smooth' });
-  };
+  const [roomModalOpen, setRoomModalOpen] = useState(false);
+  const handleStarted = () => setRoomModalOpen(true);
 
   return (
     <div className="lp-page">
       <InteractiveGrid />
       <div style={{ position: 'relative', zIndex: 1 }}>
         <LandingNavbar onStarted={handleStarted} />
-        <Hero />
+        <Hero onStarted={handleStarted} />
         <LogoCloud />
         <Features />
         <HowItWorks />
@@ -34,6 +33,7 @@ const HomePage = () => {
         <FinalCta onStarted={handleStarted} />
         <LandingFooter />
       </div>
+      <CreateJoinRoomModal isOpen={roomModalOpen} onClose={() => setRoomModalOpen(false)} />
     </div>
   );
 };

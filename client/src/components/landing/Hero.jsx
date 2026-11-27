@@ -127,7 +127,7 @@ function MockWindow() {
   );
 }
 
-export default function Hero() {
+export default function Hero({ onStarted }) {
   return (
     <section id="top" className="lp-noise lp-hero-section" style={{ position: 'relative', textAlign: 'center', overflow: 'hidden' }}>
       {/* backdrop */}
@@ -152,7 +152,7 @@ export default function Hero() {
         </p>
 
         <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 28, flexWrap: 'wrap' }}>
-          <a href="#projects" className="lp-btn lp-btn-primary" style={{ fontSize: 15, padding: '13px 22px' }}>{hero.ctaPrimary}</a>
+          <button type="button" onClick={onStarted} className="lp-btn lp-btn-primary" style={{ fontSize: 15, padding: '13px 22px' }}>{hero.ctaPrimary}</button>
           <a href="#how" className="lp-btn lp-btn-ghost" style={{ fontSize: 15, padding: '13px 22px' }}>{hero.ctaSecondary}</a>
         </div>
         <p style={{ fontSize: 13, color: 'var(--lp-faint)', marginTop: 14 }}>{hero.footnote}</p>
