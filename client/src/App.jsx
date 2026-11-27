@@ -8,6 +8,7 @@ import Navbar from './components/Navbar';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
+import CreateRoomPage from './pages/CreateRoomPage';
 import WorkspacePage from './pages/WorkspacePage';
 import ProfilePage from './pages/ProfilePage';
 import PageTransition from './components/PageTransition';
@@ -34,8 +35,8 @@ const LazyAdmin = React.lazy(() => import('./pages/AdminDashboard'));
 
 const AppRoutes = () => {
   const location = useLocation();
-  // Landing, login, and signup render their own header and hide the app navbar.
-  const chromeless = location.pathname === '/' || location.pathname === '/login' || location.pathname === '/signup';
+  // Landing, login, signup, and create-room render their own header and hide the app navbar.
+  const chromeless = location.pathname === '/' || location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/create-room';
 
   return (
     <div className="app-shell">
@@ -46,6 +47,7 @@ const AppRoutes = () => {
             <Route path="/" element={<HomePage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
+            <Route path="/create-room" element={<CreateRoomPage />} />
             <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
 
             {/* Guest rooms are deliberately public — no account, no redirect. */}

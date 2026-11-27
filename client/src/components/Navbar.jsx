@@ -55,8 +55,8 @@ const Navbar = () => {
     navigate('/login');
   };
 
-  // Hide the navbar on landing, login, and signup pages (they have their own header)
-  if (location.pathname === '/' || location.pathname === '/login' || location.pathname === '/signup') {
+  // Hide the navbar on landing, login, signup, and create-room pages (they have their own header)
+  if (location.pathname === '/' || location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/create-room') {
     return null;
   }
 

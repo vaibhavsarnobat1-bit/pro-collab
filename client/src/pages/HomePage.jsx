@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import LandingNavbar from '../components/landing/LandingNavbar';
 import InteractiveGrid from '../components/landing/InteractiveGrid';
-import CreateJoinRoomModal from '../components/CreateJoinRoomModal';
 import Hero from '../components/landing/Hero';
 import LogoCloud from '../components/landing/LogoCloud';
 import Features from '../components/landing/Features';
@@ -14,8 +14,8 @@ import FinalCta from '../components/landing/FinalCta';
 import LandingFooter from '../components/landing/LandingFooter';
 
 const HomePage = () => {
-  const [roomModalOpen, setRoomModalOpen] = useState(false);
-  const handleStarted = () => setRoomModalOpen(true);
+  const navigate = useNavigate();
+  const handleStarted = () => navigate('/create-room');
 
   return (
     <div className="lp-page">
@@ -33,7 +33,6 @@ const HomePage = () => {
         <FinalCta onStarted={handleStarted} />
         <LandingFooter />
       </div>
-      <CreateJoinRoomModal isOpen={roomModalOpen} onClose={() => setRoomModalOpen(false)} />
     </div>
   );
 };
