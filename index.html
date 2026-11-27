@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='128' fill='%23111111'/%3E%3Cpath d='M192 160L96 256L192 352' stroke='%23ffffff' stroke-width='44' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3Cpath d='M320 160L416 256L320 352' stroke='%23d4d4d4' stroke-width='44' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3Cpath d='M280 128L232 384' stroke='%23a3a3a3' stroke-width='40' stroke-linecap='round' fill='none'/%3E%3C/svg%3E" />
+    <link rel="shortcut icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='128' fill='%23111111'/%3E%3Cpath d='M192 160L96 256L192 352' stroke='%23ffffff' stroke-width='44' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3Cpath d='M320 160L416 256L320 352' stroke='%23d4d4d4' stroke-width='44' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3Cpath d='M280 128L232 384' stroke='%23a3a3a3' stroke-width='40' stroke-linecap='round' fill='none'/%3E%3C/svg%3E" />
+    <link rel="apple-touch-icon" href="./favicon.svg" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fafafa" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0b0b0b" />
+    <title>Pro-Collab — build together in one editor</title>
+    <meta name="description" content="A shared workspace for code: one editor, live preview, team chat, video calls and an AI assistant that edits the project with you." />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+    <script>
+      // Pre-paint theme: avoids flash when light mode is stored
+      (function () {
+        try {
+          var t = localStorage.getItem('pc-theme');
+          if (t === 'light') document.documentElement.classList.remove('dark');
+        } catch (e) {}
+      })();
+    </script>
+    <script type="module" crossorigin src="/pro-collab/assets/index-BJUQM6sJ.js"></script>
+    <link rel="stylesheet" crossorigin href="/pro-collab/assets/index-C3YUEPq2.css">
+  </head>
+  <body class="font-sans antialiased overflow-x-hidden">
+    <div id="root"></div>
+  </body>
+</html>
